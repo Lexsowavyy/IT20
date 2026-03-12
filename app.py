@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore")
 
 # ── Page Config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Hotel Booking Cancellation Predictor",
+    page_title="HotelPredict — Cancellation Risk Engine",
     page_icon="🏨",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -25,30 +25,436 @@ st.set_page_config(
 # ── Custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap');
-html, body, [class*="css"]  { font-family: 'DM Sans', sans-serif; }
-.stApp                       { background-color: #0f1923; color: #e8dcc8; }
-[data-testid="stSidebar"]    { background-color: #162230; border-right: 1px solid #2a3a4a; }
-.hero-title   { font-family:'Playfair Display',serif; font-size:2.4rem; font-weight:700; color:#e8dcc8; line-height:1.2; margin-bottom:0.2rem; }
-.hero-sub     { font-size:0.95rem; color:#8a9db5; font-weight:300; margin-bottom:1rem; }
-.section-label{ font-size:0.68rem; font-weight:500; letter-spacing:0.18em; text-transform:uppercase; color:#c9a96e; margin-bottom:0.5rem; margin-top:1.2rem; }
-.card         { background:#162230; border:1px solid #2a3a4a; border-radius:12px; padding:1.2rem 1.4rem; margin-bottom:0.8rem; }
-.result-cancel   { background:linear-gradient(135deg,#3d1a1a,#2a1010); border:1px solid #c0392b; border-left:4px solid #e74c3c; border-radius:12px; padding:1.6rem 2rem; text-align:center; }
-.result-no-cancel{ background:linear-gradient(135deg,#0d2b1a,#0a1f14); border:1px solid #1e8449; border-left:4px solid #27ae60; border-radius:12px; padding:1.6rem 2rem; text-align:center; }
-.result-prob  { font-size:3rem; font-weight:700; font-family:'Playfair Display',serif; }
-.result-label { font-size:0.8rem; color:#8a9db5; letter-spacing:0.1em; text-transform:uppercase; }
-.metric-row   { display:flex; gap:1rem; margin-top:0.8rem; }
-.metric-box   { flex:1; background:#1c2e3e; border:1px solid #2a3a4a; border-radius:8px; padding:0.8rem; text-align:center; }
-.metric-val   { font-size:1.3rem; font-weight:700; color:#c9a96e; font-family:'Playfair Display',serif; }
-.metric-lbl   { font-size:0.68rem; color:#8a9db5; text-transform:uppercase; letter-spacing:0.1em; }
-.stButton > button { background:linear-gradient(135deg,#c9a96e,#a07840); color:#0f1923; border:none; border-radius:8px; font-family:'DM Sans',sans-serif; font-weight:500; font-size:1rem; width:100%; padding:0.65rem; }
-.stButton > button:hover { opacity:0.88; color:#0f1923; }
-.stSelectbox > div > div, .stNumberInput > div > div > input { background-color:#1c2e3e !important; border:1px solid #2a3a4a !important; color:#e8dcc8 !important; border-radius:8px !important; }
-.stTabs [data-baseweb="tab-list"] { background-color:#162230; border-radius:8px; }
-.stTabs [data-baseweb="tab"]      { color:#8a9db5; }
-.stTabs [aria-selected="true"]    { color:#c9a96e !important; }
-.gold-divider { border:none; border-top:1px solid #c9a96e33; margin:1rem 0; }
-label { color:#b0bec5 !important; font-size:0.85rem !important; }
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap');
+
+:root {
+    --bg-deep:      #080e14;
+    --bg-mid:       #0d1720;
+    --bg-card:      #111d28;
+    --bg-elevated:  #162332;
+    --border:       #1e3045;
+    --border-light: #243a52;
+    --gold:         #d4a84b;
+    --gold-light:   #e8c577;
+    --gold-dim:     #7a5f28;
+    --text-primary: #e8e0d0;
+    --text-secondary:#8fa8c0;
+    --text-muted:   #4a6275;
+    --red:          #e05252;
+    --red-dim:      #5c1e1e;
+    --green:        #4cba7a;
+    --green-dim:    #1a4a30;
+    --amber:        #e0a03a;
+    --amber-dim:    #4a3210;
+}
+
+* { box-sizing: border-box; }
+
+html, body, [class*="css"] {
+    font-family: 'Outfit', sans-serif;
+    background-color: var(--bg-deep);
+    color: var(--text-primary);
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 10px; }
+
+/* ─── Sidebar ─── */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0a1520 0%, #0d1a28 100%);
+    border-right: 1px solid var(--border);
+}
+[data-testid="stSidebar"]::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--gold-dim), var(--gold), var(--gold-dim));
+}
+
+/* ─── Main content bg ─── */
+.stApp { background-color: var(--bg-deep); }
+.main .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1400px; }
+
+/* ─── Hero ─── */
+.hero-wrapper {
+    position: relative;
+    padding: 2.2rem 2.5rem;
+    background: linear-gradient(135deg, #0d1a28 0%, #111f2e 60%, #0a1520 100%);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    margin-bottom: 1.8rem;
+    overflow: hidden;
+}
+.hero-wrapper::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold), var(--gold-light), var(--gold), transparent);
+}
+.hero-tag {
+    display: inline-block;
+    font-size: 0.75rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+    background: rgba(212,168,75,0.1);
+    border: 1px solid rgba(212,168,75,0.3);
+    border-radius: 20px;
+    padding: 0.25rem 0.9rem;
+    margin-bottom: 0.7rem;
+}
+.hero-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 2.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.15;
+    margin-bottom: 0.4rem;
+    letter-spacing: -0.01em;
+}
+.hero-title span { color: var(--gold); }
+.hero-sub {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    font-weight: 300;
+    letter-spacing: 0.02em;
+}
+
+/* ─── Section Labels ─── */
+.section-label {
+    font-size: 0.92rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 0.7rem;
+    margin-top: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--border-light), transparent);
+}
+
+/* ─── Cards ─── */
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem 1.4rem;
+    margin-bottom: 0.8rem;
+    transition: border-color 0.2s;
+}
+.card:hover { border-color: var(--border-light); }
+
+/* ─── Info Card (sidebar) ─── */
+.info-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+    margin-bottom: 0.7rem;
+}
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--border);
+}
+.info-row:last-child { border-bottom: none; padding-bottom: 0; }
+.info-key { font-size: 0.92rem; color: var(--text-secondary); }
+.info-val { font-size: 1.05rem; font-weight: 600; color: var(--gold); font-family: 'Cormorant Garamond', serif; }
+
+/* ─── Result Panels ─── */
+.result-cancel {
+    background: linear-gradient(160deg, #1a0a0a 0%, #2a0e0e 50%, #1a0a0a 100%);
+    border: 1px solid #8b1a1a;
+    border-top: 3px solid var(--red);
+    border-radius: 14px;
+    padding: 1.8rem 2rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+.result-cancel::before {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(ellipse at center, rgba(224,82,82,0.06) 0%, transparent 60%);
+    pointer-events: none;
+}
+.result-no-cancel {
+    background: linear-gradient(160deg, #081a10 0%, #0e2a18 50%, #081a10 100%);
+    border: 1px solid #1a6b38;
+    border-top: 3px solid var(--green);
+    border-radius: 14px;
+    padding: 1.8rem 2rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+.result-no-cancel::before {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(ellipse at center, rgba(76,186,122,0.06) 0%, transparent 60%);
+    pointer-events: none;
+}
+.result-icon { font-size: 2rem; margin-bottom: 0.4rem; }
+.result-verdict {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.9rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    margin-bottom: 0.4rem;
+}
+.result-prob {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 3.8rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.2rem;
+}
+.result-label {
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+/* ─── Metric Boxes ─── */
+.metric-row { display: flex; gap: 0.7rem; margin-top: 1rem; }
+.metric-box {
+    flex: 1;
+    background: rgba(13,23,36,0.8);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.8rem 0.5rem;
+    text-align: center;
+    transition: border-color 0.2s, transform 0.2s;
+}
+.metric-box:hover { border-color: var(--border-light); transform: translateY(-1px); }
+.metric-val {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--gold);
+    font-family: 'Cormorant Garamond', serif;
+    line-height: 1.2;
+}
+.metric-lbl {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 0.2rem;
+}
+
+/* ─── Risk Badge ─── */
+.risk-badge-wrap { margin-top: 1rem; }
+.badge-very-high {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: rgba(192,57,43,0.15); border: 1px solid #c0392b;
+    color: var(--red); border-radius: 20px;
+    padding: 0.25rem 0.9rem; font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.08em;
+}
+.badge-high {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: rgba(192,57,43,0.12); border: 1px solid #a93226;
+    color: #e57373; border-radius: 20px;
+    padding: 0.25rem 0.9rem; font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.08em;
+}
+.badge-moderate {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: rgba(201,169,110,0.12); border: 1px solid var(--gold-dim);
+    color: var(--gold); border-radius: 20px;
+    padding: 0.25rem 0.9rem; font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.08em;
+}
+.badge-low {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: rgba(30,132,73,0.12); border: 1px solid #1e8449;
+    color: var(--green); border-radius: 20px;
+    padding: 0.25rem 0.9rem; font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.08em;
+}
+.advice-box {
+    margin-top: 0.7rem;
+    background: rgba(13,23,36,0.6);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--gold-dim);
+    border-radius: 0 8px 8px 0;
+    padding: 0.7rem 1rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+/* ─── Rate Display Boxes ─── */
+.rate-box {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.7rem 1rem;
+    margin-bottom: 0.6rem;
+}
+.rate-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.2rem;
+}
+.rate-value {
+    font-size: 1.65rem;
+    font-weight: 700;
+    font-family: 'Cormorant Garamond', serif;
+    line-height: 1;
+}
+
+/* ─── Placeholder ─── */
+.placeholder-box {
+    background: var(--bg-card);
+    border: 1px dashed var(--border-light);
+    border-radius: 14px;
+    padding: 3rem 1.5rem;
+    text-align: center;
+    color: var(--text-muted);
+}
+.placeholder-icon { font-size: 2.5rem; margin-bottom: 0.7rem; opacity: 0.5; }
+
+/* ─── Button ─── */
+.stButton > button {
+    background: linear-gradient(135deg, var(--gold) 0%, #a07840 50%, var(--gold) 100%);
+    background-size: 200% 100%;
+    color: #080e14 !important;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.92rem;
+    width: 100%;
+    padding: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    transition: background-position 0.4s, box-shadow 0.3s, transform 0.15s;
+    box-shadow: 0 4px 20px rgba(212,168,75,0.2);
+}
+.stButton > button:hover {
+    background-position: right center;
+    box-shadow: 0 6px 28px rgba(212,168,75,0.35);
+    transform: translateY(-1px);
+    color: #080e14 !important;
+}
+.stButton > button:active { transform: translateY(0); }
+
+/* ─── Inputs ─── */
+.stSelectbox > div > div,
+.stNumberInput > div > div > input {
+    background-color: var(--bg-elevated) !important;
+    border: 1px solid var(--border-light) !important;
+    color: var(--text-primary) !important;
+    border-radius: 8px !important;
+    font-family: 'Outfit', sans-serif !important;
+}
+.stSelectbox > div > div:focus-within,
+.stNumberInput > div > div > input:focus {
+    border-color: var(--gold-dim) !important;
+    box-shadow: 0 0 0 2px rgba(212,168,75,0.15) !important;
+}
+
+/* ─── Tabs ─── */
+.stTabs [data-baseweb="tab-list"] {
+    background: var(--bg-card);
+    border-radius: 10px;
+    padding: 0.25rem;
+    gap: 0.25rem;
+    border: 1px solid var(--border);
+}
+.stTabs [data-baseweb="tab"] {
+    color: var(--text-muted) !important;
+    border-radius: 7px;
+    padding: 0.5rem 1.2rem;
+    font-size: 0.85rem;
+    font-family: 'Outfit', sans-serif;
+    letter-spacing: 0.03em;
+}
+.stTabs [aria-selected="true"] {
+    color: var(--gold) !important;
+    background: var(--bg-elevated) !important;
+}
+
+/* ─── Labels ─── */
+label { color: var(--text-secondary) !important; font-size: 0.82rem !important; font-weight: 400 !important; }
+
+/* ─── Divider ─── */
+.gold-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0.5rem 0 1.5rem;
+    position: relative;
+}
+.gold-divider::after {
+    content: '◆';
+    position: absolute;
+    left: 50%; top: -0.55rem;
+    transform: translateX(-50%);
+    color: var(--gold-dim);
+    font-size: 0.6rem;
+    background: var(--bg-deep);
+    padding: 0 0.4rem;
+}
+
+/* ─── Sidebar brand ─── */
+.brand-wrap { padding: 0.8rem 0 1.2rem; }
+.brand-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--gold);
+    letter-spacing: 0.03em;
+    line-height: 1;
+}
+.brand-sub { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem; letter-spacing: 0.1em; text-transform: uppercase; }
+
+/* ─── Stats row ─── */
+.stat-pill {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.92rem;
+}
+.stat-pill:last-child { border-bottom: none; }
+.stat-pill-key { color: var(--text-secondary); }
+.stat-pill-val { font-weight: 600; font-family: 'Cormorant Garamond', serif; font-size: 1.15rem; }
+
+/* ─── Progress bar ─── */
+.stProgress > div > div > div > div {
+    background: linear-gradient(90deg, var(--gold-dim), var(--gold)) !important;
+    border-radius: 10px !important;
+}
+.stProgress > div > div > div {
+    background: var(--bg-elevated) !important;
+    border-radius: 10px !important;
+    height: 6px !important;
+}
+
+/* ─── Dataframe ─── */
+[data-testid="stDataFrame"] { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -98,6 +504,12 @@ REPEATED_OPTIONS = ["No", "Yes"]
 ROOM_OPTIONS     = ["Yes", "No"]
 COUNTRY_OPTIONS  = sorted(COUNTRY_CANCEL_RATES.keys())
 AGENCY_OPTIONS   = list(AGENCY_RATES.keys())
+
+# ── ADR in PHP (approx. 1 EUR ≈ 62 PHP) ──────────────────────────────────────
+ADR_CURRENCY     = "₱"
+ADR_LABEL        = "ADR (₱)"
+ADR_MAX          = 31620.0   # ≈ €510
+ADR_STEP         = 100.0
 
 
 # ── Download helpers ──────────────────────────────────────────────────────────
@@ -152,6 +564,10 @@ def predict(model, scaler, raw: dict):
 # ── Init ──────────────────────────────────────────────────────────────────────
 init_db()
 
+# Session state — prediction result persists only after explicit button click
+if 'prediction_result' not in st.session_state:
+    st.session_state.prediction_result = None
+
 try:
     model, scaler = load_artifacts()
     model_ok = True
@@ -160,72 +576,99 @@ except Exception as e:
     model_err = str(e)
 
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# SIDEBAR
+# ══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("""
-    <div style='padding:0.5rem 0 1rem;'>
-        <div style='font-family:Playfair Display,serif;font-size:1.3rem;color:#c9a96e;font-weight:700;'>🏨 HotelPredict</div>
-        <div style='font-size:0.78rem;color:#8a9db5;margin-top:0.2rem;'>Cancellation Risk Engine</div>
-    </div>
-    <hr style='border-color:#2a3a4a;margin-bottom:1rem;'>
-    """, unsafe_allow_html=True)
-
-    status_color = "#27ae60" if model_ok else "#e74c3c"
+    status_color = "#4cba7a" if model_ok else "#e05252"
     status_text  = "✓ Loaded" if model_ok else "✗ Error"
 
-    st.markdown("<div class='section-label'>Model Info</div>", unsafe_allow_html=True)
     st.markdown(f"""
-    <div class='card' style='padding:0.9rem 1rem;'>
-        <div style='font-size:0.8rem;color:#8a9db5;'>Algorithm</div>
-        <div style='color:#e8dcc8;font-weight:500;'>Random Forest (Tuned)</div>
-        <div style='font-size:0.8rem;color:#8a9db5;margin-top:0.5rem;'>Features</div>
-        <div style='color:#c9a96e;font-weight:600;'>13 input variables</div>
-        <div style='font-size:0.8rem;color:#8a9db5;margin-top:0.5rem;'>Test Acc / AUC</div>
-        <div style='color:#c9a96e;font-weight:600;'>82.8% &nbsp;|&nbsp; 0.9031</div>
-        <div style='font-size:0.8rem;color:#8a9db5;margin-top:0.5rem;'>F1-Score</div>
-        <div style='color:#c9a96e;font-weight:600;'>71.7%</div>
-        <div style='font-size:0.8rem;color:#8a9db5;margin-top:0.5rem;'>Status</div>
-        <div style='color:{status_color};font-weight:500;'>{status_text}</div>
+    <div class='brand-wrap'>
+        <div class='brand-name'>🏨 HotelPredict</div>
+        <div class='brand-sub'>Cancellation Risk Engine</div>
+    </div>
+    <hr style='border:none;border-top:1px solid #1e3045;margin-bottom:1.2rem;'>
+    <div class='section-label'>Model Info</div>
+    <div class='info-card'>
+        <div class='info-row'>
+            <span class='info-key'>Algorithm</span>
+            <span class='info-val'>Random Forest</span>
+        </div>
+        <div class='info-row'>
+            <span class='info-key'>Features</span>
+            <span class='info-val'>13 variables</span>
+        </div>
+        <div class='info-row'>
+            <span class='info-key'>Test Accuracy</span>
+            <span class='info-val'>82.8%</span>
+        </div>
+        <div class='info-row'>
+            <span class='info-key'>AUC Score</span>
+            <span class='info-val' style='font-size:1.15rem;'>0.9031</span>
+        </div>
+        <div class='info-row'>
+            <span class='info-key'>F1-Score</span>
+            <span class='info-val'>71.7%</span>
+        </div>
+        <div class='info-row'>
+            <span class='info-key'>Status</span>
+            <span style='color:{status_color};font-weight:600;font-size:0.85rem;'>{status_text}</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
     st.markdown("<div class='section-label'>Session Stats</div>", unsafe_allow_html=True)
     stats = fetch_stats()
     total, n_canceled, avg_prob, avg_adr = stats if stats and stats[0] else (0, 0, 0.0, 0.0)
+
+    # Convert avg_adr from EUR to PHP for display
+    avg_adr_php = round((avg_adr or 0) * 62, 2)
+
     st.markdown(f"""
-    <div class='card' style='padding:0.9rem 1rem;'>
-        <div style='display:flex;justify-content:space-between;margin-bottom:0.4rem;'>
-            <span style='font-size:0.8rem;color:#8a9db5;'>Total Predictions</span>
-            <span style='color:#c9a96e;font-weight:600;'>{total or 0}</span>
+    <div class='info-card'>
+        <div class='stat-pill'>
+            <span class='stat-pill-key'>Total Predictions</span>
+            <span class='stat-pill-val' style='color:#d4a84b;'>{total or 0}</span>
         </div>
-        <div style='display:flex;justify-content:space-between;margin-bottom:0.4rem;'>
-            <span style='font-size:0.8rem;color:#8a9db5;'>Cancellations Flagged</span>
-            <span style='color:#e74c3c;font-weight:600;'>{n_canceled or 0}</span>
+        <div class='stat-pill'>
+            <span class='stat-pill-key'>Cancellations Flagged</span>
+            <span class='stat-pill-val' style='color:#e05252;'>{n_canceled or 0}</span>
         </div>
-        <div style='display:flex;justify-content:space-between;margin-bottom:0.4rem;'>
-            <span style='font-size:0.8rem;color:#8a9db5;'>Avg Cancel Prob</span>
-            <span style='color:#c9a96e;font-weight:600;'>{avg_prob or 0}%</span>
+        <div class='stat-pill'>
+            <span class='stat-pill-key'>Avg Cancel Prob</span>
+            <span class='stat-pill-val' style='color:#d4a84b;'>{avg_prob or 0}%</span>
         </div>
-        <div style='display:flex;justify-content:space-between;'>
-            <span style='font-size:0.8rem;color:#8a9db5;'>Avg ADR</span>
-            <span style='color:#c9a96e;font-weight:600;'>€{avg_adr or 0}</span>
+        <div class='stat-pill'>
+            <span class='stat-pill-key'>Avg ADR</span>
+            <span class='stat-pill-val' style='color:#d4a84b;'>₱{avg_adr_php:,.0f}</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("<div class='section-label'>Rate Reference</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-label'>Risk Reference</div>", unsafe_allow_html=True)
     st.markdown("""
-    <div class='card' style='padding:0.9rem 1rem;font-size:0.75rem;color:#8a9db5;line-height:1.8;'>
-        All cancel rates are pre-computed from training data.<br>
-        🔴 High &gt;35% &nbsp;|&nbsp; 🟡 Mid 25–35% &nbsp;|&nbsp; 🟢 Low &lt;25%
+    <div class='info-card' style='font-size:0.75rem;line-height:2;'>
+        <div>All cancel rates are pre-computed<br>from training data.</div>
+        <div style='margin-top:0.5rem;display:flex;flex-direction:column;gap:0.3rem;'>
+            <span>🔴 <strong style='color:#e05252;'>High</strong> &nbsp; &gt;35%</span>
+            <span>🟡 <strong style='color:#d4a84b;'>Mid</strong> &nbsp; &nbsp;25–35%</span>
+            <span>🟢 <strong style='color:#4cba7a;'>Low</strong> &nbsp; &nbsp;&lt;25%</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
 
-# ── Header ────────────────────────────────────────────────────────────────────
-st.markdown("<div class='hero-title'>Booking Cancellation Predictor</div>", unsafe_allow_html=True)
-st.markdown("<div class='hero-sub'>Assess cancellation risk for hotel reservations using a trained Random Forest model.</div>", unsafe_allow_html=True)
-st.markdown("<hr class='gold-divider'>", unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# HERO HEADER
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("""
+<div class='hero-wrapper'>
+    <div class='hero-tag'>AI-Powered · Random Forest · Real-Time</div>
+    <div class='hero-title'>Booking <span>Cancellation</span> Predictor</div>
+    <div class='hero-sub'>Assess cancellation risk for hotel reservations using a trained Random Forest model. Supports revenue optimization and proactive guest management.</div>
+</div>
+""", unsafe_allow_html=True)
 
 tab_predict, tab_history = st.tabs(["🔍  Predict", "🕓  History"])
 
@@ -242,75 +685,154 @@ with tab_predict:
         st.markdown("<div class='section-label'>Booking Information</div>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1:
-            hotel        = st.selectbox("Hotel Type",   HOTEL_OPTIONS)
-            deposit_type = st.selectbox("Deposit Type", DEPOSIT_OPTIONS)
+            hotel        = st.selectbox("Hotel Type",   HOTEL_OPTIONS,  index=None, placeholder="Select hotel type...")
+            deposit_type = st.selectbox("Deposit Type", DEPOSIT_OPTIONS, index=None, placeholder="Select deposit type...")
         with c2:
-            lead_time       = st.number_input("Lead Time (days)", 0, 737, 30)
-            booking_changes = st.number_input("Booking Changes",  0, 20,  0)
+            lead_time       = st.number_input("Lead Time (days)", min_value=0, max_value=737, value=None, step=1, placeholder="Enter days...")
+            booking_changes = st.number_input("Booking Changes",  min_value=0, max_value=20,  value=None, step=1, placeholder="Enter number...")
         with c3:
-            adr     = st.number_input("ADR (€)",        0.0, 510.0, 100.0, 5.0)
-            parking = st.number_input("Parking Spaces", 0,   8,     0)
+            # ADR input with comma formatting on change
+            if "adr_input" not in st.session_state:
+                st.session_state["adr_input"] = ""
+
+            def _fmt_adr():
+                raw = st.session_state["adr_input"].replace(",", "").strip()
+                if raw:
+                    try:
+                        val = float(raw)
+                        if val >= 1000:
+                            st.session_state["adr_input"] = f"{val:,.0f}"
+                        else:
+                            st.session_state["adr_input"] = f"{val:.0f}"
+                    except ValueError:
+                        pass
+
+            adr_raw = st.text_input(
+                ADR_LABEL,
+                key="adr_input",
+                on_change=_fmt_adr,
+                help="Average Daily Rate in Philippine Peso (₱)"
+            )
+            adr_php = None
+            adr_display_error = False
+            if adr_raw.strip():
+                try:
+                    adr_php = float(adr_raw.replace(",", "").strip())
+                    if adr_php < 0 or adr_php > ADR_MAX:
+                        adr_display_error = True
+                        adr_php = None
+                except ValueError:
+                    adr_display_error = True
+                    adr_php = None
+            if adr_display_error:
+                st.markdown(
+                    "<div style='font-size:0.78rem;color:#e05252;margin-top:-0.4rem;'>✗ Enter a valid amount</div>",
+                    unsafe_allow_html=True
+                )
+            parking = st.number_input("Parking Spaces", min_value=0, max_value=8, value=None, step=1, placeholder="Enter number...")
+
+        # Convert PHP back to EUR for model (model was trained on EUR)
+        adr_eur = (adr_php / 62.0) if adr_php is not None else None
 
         # ── Guest Origin ──────────────────────────────────────────────────────
         st.markdown("<div class='section-label'>Guest Origin & Booking Channel</div>", unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
-            country     = st.selectbox(
+            country = st.selectbox(
                 "Country of Origin",
                 COUNTRY_OPTIONS,
-                index=COUNTRY_OPTIONS.index("PRT"),
+                index=None,
+                placeholder="Select country...",
                 help="Select guest country. Cancel rate is pre-computed from training data."
             )
             agency_type = st.selectbox(
                 "Booking Channel",
                 AGENCY_OPTIONS,
+                index=None,
+                placeholder="Select booking channel...",
                 help="How the booking was made. Cancel rate is pre-computed from training data."
             )
         with c2:
-            country_rate = COUNTRY_CANCEL_RATES.get(country, GLOBAL_MEAN)
-            agency_rate  = AGENCY_RATES[agency_type]
-            c_color = "#e74c3c" if country_rate > 0.35 else "#c9a96e" if country_rate > 0.25 else "#27ae60"
-            a_color = "#e74c3c" if agency_rate  > 0.35 else "#c9a96e" if agency_rate  > 0.25 else "#27ae60"
-            st.markdown(f"""
-            <div style='display:flex;flex-direction:column;gap:0.6rem;margin-top:0.3rem;'>
-                <div style='background:#1c2e3e;border:1px solid #2a3a4a;border-radius:8px;padding:0.6rem 1rem;'>
-                    <div style='font-size:0.7rem;color:#8a9db5;text-transform:uppercase;letter-spacing:0.1em;'>
-                        Country Cancel Rate
+            if country and agency_type:
+                country_rate = COUNTRY_CANCEL_RATES.get(country, GLOBAL_MEAN)
+                agency_rate  = AGENCY_RATES[agency_type]
+                c_color = "#e05252" if country_rate > 0.35 else "#d4a84b" if country_rate > 0.25 else "#4cba7a"
+                a_color = "#e05252" if agency_rate  > 0.35 else "#d4a84b" if agency_rate  > 0.25 else "#4cba7a"
+                st.markdown(f"""
+                <div style='display:flex;flex-direction:column;gap:0.6rem;margin-top:0.2rem;'>
+                    <div class='rate-box'>
+                        <div class='rate-label'>Country Cancel Rate</div>
+                        <div class='rate-value' style='color:{c_color};'>{country_rate*100:.1f}%</div>
                     </div>
-                    <div style='font-size:1.3rem;font-weight:700;color:{c_color};font-family:Playfair Display,serif;'>
-                        {country_rate*100:.1f}%
-                    </div>
-                </div>
-                <div style='background:#1c2e3e;border:1px solid #2a3a4a;border-radius:8px;padding:0.6rem 1rem;'>
-                    <div style='font-size:0.7rem;color:#8a9db5;text-transform:uppercase;letter-spacing:0.1em;'>
-                        Channel Cancel Rate
-                    </div>
-                    <div style='font-size:1.3rem;font-weight:700;color:{a_color};font-family:Playfair Display,serif;'>
-                        {agency_rate*100:.1f}%
+                    <div class='rate-box'>
+                        <div class='rate-label'>Channel Cancel Rate</div>
+                        <div class='rate-value' style='color:{a_color};'>{agency_rate*100:.1f}%</div>
                     </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            elif country:
+                country_rate = COUNTRY_CANCEL_RATES.get(country, GLOBAL_MEAN)
+                c_color = "#e05252" if country_rate > 0.35 else "#d4a84b" if country_rate > 0.25 else "#4cba7a"
+                st.markdown(f"""
+                <div style='display:flex;flex-direction:column;gap:0.6rem;margin-top:0.2rem;'>
+                    <div class='rate-box'>
+                        <div class='rate-label'>Country Cancel Rate</div>
+                        <div class='rate-value' style='color:{c_color};'>{country_rate*100:.1f}%</div>
+                    </div>
+                    <div class='rate-box' style='opacity:0.4;'>
+                        <div class='rate-label'>Channel Cancel Rate</div>
+                        <div class='rate-value' style='color:#4a6275;'>— %</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            elif agency_type:
+                agency_rate = AGENCY_RATES[agency_type]
+                a_color = "#e05252" if agency_rate > 0.35 else "#d4a84b" if agency_rate > 0.25 else "#4cba7a"
+                st.markdown(f"""
+                <div style='display:flex;flex-direction:column;gap:0.6rem;margin-top:0.2rem;'>
+                    <div class='rate-box' style='opacity:0.4;'>
+                        <div class='rate-label'>Country Cancel Rate</div>
+                        <div class='rate-value' style='color:#4a6275;'>— %</div>
+                    </div>
+                    <div class='rate-box'>
+                        <div class='rate-label'>Channel Cancel Rate</div>
+                        <div class='rate-value' style='color:{a_color};'>{agency_rate*100:.1f}%</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style='display:flex;flex-direction:column;gap:0.6rem;margin-top:0.2rem;'>
+                    <div class='rate-box' style='opacity:0.35;'>
+                        <div class='rate-label'>Country Cancel Rate</div>
+                        <div class='rate-value' style='color:#4a6275;'>— %</div>
+                    </div>
+                    <div class='rate-box' style='opacity:0.35;'>
+                        <div class='rate-label'>Channel Cancel Rate</div>
+                        <div class='rate-value' style='color:#4a6275;'>— %</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
         # ── Stay & Guests ─────────────────────────────────────────────────────
         st.markdown("<div class='section-label'>Stay & Guests</div>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1:
-            total_nights = st.number_input("Total Nights",      0, 60, 3)
-            total_guests = st.number_input("Total Guests",      1, 10, 2)
+            total_nights = st.number_input("Total Nights", min_value=0, max_value=60, value=None, step=1, placeholder="Enter nights...")
+            total_guests = st.number_input("Total Guests", min_value=1, max_value=10, value=None, step=1, placeholder="Enter guests...")
         with c2:
-            special_req   = st.number_input("Special Requests",  0, 5,  0)
-            got_requested = st.selectbox("Got Requested Room?",  ROOM_OPTIONS)
+            special_req   = st.number_input("Special Requests", min_value=0, max_value=5, value=None, step=1, placeholder="Enter number...")
+            got_requested = st.selectbox("Got Requested Room?", ROOM_OPTIONS, index=None, placeholder="Select...")
         with c3:
-            is_repeated = st.selectbox("Repeated Guest?", REPEATED_OPTIONS)
+            is_repeated = st.selectbox("Repeated Guest?", REPEATED_OPTIONS, index=None, placeholder="Select...")
 
         # ── Guest History ─────────────────────────────────────────────────────
         st.markdown("<div class='section-label'>Guest History</div>", unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
-            prev_cancel = st.number_input("Previous Cancellations",   0, 26, 0)
+            prev_cancel = st.number_input("Previous Cancellations",   min_value=0, max_value=26, value=None, step=1, placeholder="Enter number...")
         with c2:
-            prev_ok     = st.number_input("Previous Bookings (Kept)", 0, 72, 0)
+            prev_ok     = st.number_input("Previous Bookings (Kept)", min_value=0, max_value=72, value=None, step=1, placeholder="Enter number...")
 
     # ── Result Panel ──────────────────────────────────────────────────────────
     with col_result:
@@ -321,149 +843,334 @@ with tab_predict:
             if not model_ok:
                 st.error(f"Model not loaded: {model_err}")
             else:
-                raw = {
-                    'lead_time'                     : lead_time,
-                    'adr'                           : adr,
-                    'total_of_special_requests'     : special_req,
-                    'required_car_parking_spaces'   : parking,
-                    'booking_changes'               : booking_changes,
-                    'is_repeated_guest'             : 1 if is_repeated == "Yes" else 0,
-                    'total_nights'                  : total_nights,
-                    'total_guests'                  : total_guests,
-                    'got_requested_room'            : 1 if got_requested == "Yes" else 0,
-                    'previous_cancellations'        : prev_cancel,
-                    'previous_bookings_not_canceled': prev_ok,
-                    'deposit_type'                  : deposit_type,
-                    'agent_cancel_rate'             : AGENCY_RATES[agency_type],
-                    'country_cancel_rate'           : COUNTRY_CANCEL_RATES.get(country, GLOBAL_MEAN),
-                }
+                # ── Validate all fields are filled ─────────────────────────
+                missing = []
+                if hotel        is None: missing.append("Hotel Type")
+                if deposit_type is None: missing.append("Deposit Type")
+                if lead_time    is None: missing.append("Lead Time")
+                if booking_changes is None: missing.append("Booking Changes")
+                if adr_php      is None: missing.append("ADR (₱)")
+                if parking      is None: missing.append("Parking Spaces")
+                if country      is None: missing.append("Country of Origin")
+                if agency_type  is None: missing.append("Booking Channel")
+                if total_nights is None: missing.append("Total Nights")
+                if total_guests is None: missing.append("Total Guests")
+                if special_req  is None: missing.append("Special Requests")
+                if got_requested is None: missing.append("Got Requested Room?")
+                if is_repeated  is None: missing.append("Repeated Guest?")
+                if prev_cancel  is None: missing.append("Previous Cancellations")
+                if prev_ok      is None: missing.append("Previous Bookings (Kept)")
 
-                cancel_prob, prediction, feature_row = predict(model, scaler, raw)
-                stay_prob = 1 - cancel_prob
-
-                # Save to DB
-                insert_prediction(
-                    created_at     = datetime.now().isoformat(timespec="seconds"),
-                    hotel          = hotel,
-                    lead_time      = lead_time,
-                    deposit_type   = deposit_type,
-                    market_segment = f"{country} / {agency_type}",
-                    adr            = adr,
-                    features_json  = json.dumps(feature_row),
-                    prediction     = prediction,
-                    cancel_prob    = round(cancel_prob, 4),
-                )
-
-                # ── Result display ─────────────────────────────────────────
-                if prediction == 1:
-                    st.markdown(f"""
-                    <div class='result-cancel'>
-                        <div class='result-label'>PREDICTION</div>
-                        <div style='font-family:Playfair Display,serif;font-size:1.7rem;font-weight:700;color:#e74c3c;'>⚠ Likely to Cancel</div>
-                        <div class='result-prob' style='color:#e74c3c;'>{cancel_prob*100:.1f}%</div>
-                        <div class='result-label'>cancellation probability</div>
-                    </div>""", unsafe_allow_html=True)
+                if missing:
+                    st.warning(f"⚠ Please fill in all required fields: **{', '.join(missing)}**")
                 else:
-                    st.markdown(f"""
-                    <div class='result-no-cancel'>
-                        <div class='result-label'>PREDICTION</div>
-                        <div style='font-family:Playfair Display,serif;font-size:1.7rem;font-weight:700;color:#27ae60;'>✓ Likely to Stay</div>
-                        <div class='result-prob' style='color:#27ae60;'>{stay_prob*100:.1f}%</div>
-                        <div class='result-label'>retention probability</div>
-                    </div>""", unsafe_allow_html=True)
+                    raw = {
+                        'lead_time'                     : lead_time,
+                        'adr'                           : adr_eur,
+                        'total_of_special_requests'     : special_req,
+                        'required_car_parking_spaces'   : parking,
+                        'booking_changes'               : booking_changes,
+                        'is_repeated_guest'             : 1 if is_repeated == "Yes" else 0,
+                        'total_nights'                  : total_nights,
+                        'total_guests'                  : total_guests,
+                        'got_requested_room'            : 1 if got_requested == "Yes" else 0,
+                        'previous_cancellations'        : prev_cancel,
+                        'previous_bookings_not_canceled': prev_ok,
+                        'deposit_type'                  : deposit_type,
+                        'agent_cancel_rate'             : AGENCY_RATES[agency_type],
+                        'country_cancel_rate'           : COUNTRY_CANCEL_RATES.get(country, GLOBAL_MEAN),
+                    }
 
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("<div style='font-size:0.75rem;color:#8a9db5;margin-bottom:0.3rem;'>Cancellation probability</div>", unsafe_allow_html=True)
-                st.progress(cancel_prob)
+                    cancel_prob, prediction, feature_row = predict(model, scaler, raw)
+                    stay_prob = 1 - cancel_prob
 
-                st.markdown(f"""
-                <div class='metric-row'>
-                    <div class='metric-box'>
-                        <div class='metric-val'>{cancel_prob*100:.1f}%</div>
-                        <div class='metric-lbl'>Cancel Risk</div>
-                    </div>
-                    <div class='metric-box'>
-                        <div class='metric-val'>{stay_prob*100:.1f}%</div>
-                        <div class='metric-lbl'>Retention</div>
-                    </div>
-                    <div class='metric-box'>
-                        <div class='metric-val' style='color:{a_color};'>{agency_rate*100:.1f}%</div>
-                        <div class='metric-lbl'>Channel Rate</div>
-                    </div>
-                </div>""", unsafe_allow_html=True)
-
-                # ── Risk badge & advice ────────────────────────────────────
-                st.markdown("<br>", unsafe_allow_html=True)
-                if cancel_prob >= 0.75:
-                    badge  = "<span style='background:#c0392b22;border:1px solid #c0392b;color:#e74c3c;border-radius:20px;padding:0.2rem 0.8rem;font-size:0.75rem;'>🔴 VERY HIGH RISK</span>"
-                    advice = "Require a non-refundable deposit or full prepayment. Set up an overbooking buffer."
-                elif cancel_prob >= 0.52:
-                    badge  = "<span style='background:#c0392b22;border:1px solid #c0392b;color:#e74c3c;border-radius:20px;padding:0.2rem 0.8rem;font-size:0.75rem;'>🔴 HIGH RISK</span>"
-                    advice = "Send a confirmation reminder 1 week before arrival. Consider requesting a partial deposit."
-                elif cancel_prob >= 0.30:
-                    badge  = "<span style='background:#7d600022;border:1px solid #c9a96e;color:#c9a96e;border-radius:20px;padding:0.2rem 0.8rem;font-size:0.75rem;'>🟡 MODERATE RISK</span>"
-                    advice = "Monitor this booking. Follow up if no special requests are added."
-                else:
-                    badge  = "<span style='background:#1e844922;border:1px solid #1e8449;color:#27ae60;border-radius:20px;padding:0.2rem 0.8rem;font-size:0.75rem;'>🟢 LOW RISK</span>"
-                    advice = "Booking looks secure. Standard follow-up recommended."
-
-                st.markdown(f"""
-                <div style='margin-top:0.6rem;'>
-                    {badge}
-                    <div style='font-size:0.8rem;color:#8a9db5;margin-top:0.5rem;line-height:1.6;'>
-                        💡 {advice}
-                    </div>
-                </div>""", unsafe_allow_html=True)
-
-                with st.expander("📋 Feature Summary"):
-                    st.dataframe(
-                        pd.DataFrame([feature_row]).T.rename(columns={0: "Value"}),
-                        use_container_width=True
+                    # Save to DB (store ADR in EUR for consistency)
+                    insert_prediction(
+                        created_at     = datetime.now().isoformat(timespec="seconds"),
+                        hotel          = hotel,
+                        lead_time      = lead_time,
+                        deposit_type   = deposit_type,
+                        market_segment = f"{country} / {agency_type}",
+                        adr            = round(adr_eur, 2),
+                        features_json  = json.dumps(feature_row),
+                        prediction     = prediction,
+                        cancel_prob    = round(cancel_prob, 4),
                     )
-        else:
+
+                    # Resolve display colors for agency
+                    agency_rate_val = AGENCY_RATES[agency_type]
+                    a_color_val = "#e05252" if agency_rate_val > 0.35 else "#d4a84b" if agency_rate_val > 0.25 else "#4cba7a"
+
+                    # Store result in session state
+                    st.session_state.prediction_result = {
+                        'cancel_prob'  : cancel_prob,
+                        'stay_prob'    : stay_prob,
+                        'prediction'   : prediction,
+                        'feature_row'  : feature_row,
+                        'adr_php'      : adr_php,
+                        'agency_rate'  : agency_rate_val,
+                        'a_color'      : a_color_val,
+                    }
+
+        # ── Display result from session state only ─────────────────────────
+        res = st.session_state.prediction_result
+
+        if res is None:
             st.markdown("""
-            <div style='background:#162230;border:1px dashed #2a3a4a;border-radius:12px;
-                        padding:2.5rem 1.5rem;text-align:center;color:#4a6070;'>
-                <div style='font-size:2rem;margin-bottom:0.5rem;'>🏨</div>
-                <div style='font-size:0.9rem;'>Fill in the booking details<br>
-                and click <strong style="color:#c9a96e">Predict</strong>.</div>
+            <div class='placeholder-box'>
+                <div style='font-size:0.9rem;color:#4a6275;line-height:1.7;'>
+                    Fill in the booking details<br>
+                    and click <strong style="color:#d4a84b;">Predict</strong> to assess risk.
+                </div>
             </div>""", unsafe_allow_html=True)
+        else:
+            cancel_prob  = res['cancel_prob']
+            stay_prob    = res['stay_prob']
+            prediction   = res['prediction']
+            feature_row  = res['feature_row']
+            adr_php      = res['adr_php']
+            agency_rate  = res['agency_rate']
+            a_color      = res['a_color']
+
+            # ── Result display ─────────────────────────────────────────────
+            if prediction == 1:
+                st.markdown(f"""
+                <div class='result-cancel'>
+                    <div class='result-verdict' style='color:#e05252;'>⚠ Likely to Cancel</div>
+                    <div class='result-prob' style='color:#e05252;'>{cancel_prob*100:.1f}%</div>
+                    <div class='result-label'>cancellation probability</div>
+                </div>""", unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class='result-no-cancel'>
+                    <div class='result-verdict' style='color:#4cba7a;'>✓ Likely to Stay</div>
+                    <div class='result-prob' style='color:#4cba7a;'>{stay_prob*100:.1f}%</div>
+                    <div class='result-label'>retention probability</div>
+                </div>""", unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown(
+                "<div style='font-size:0.72rem;color:#4a6275;margin-bottom:0.4rem;letter-spacing:0.08em;text-transform:uppercase;'>Cancellation Probability</div>",
+                unsafe_allow_html=True
+            )
+            st.progress(cancel_prob)
+
+            st.markdown(f"""
+            <div class='metric-row'>
+                <div class='metric-box'>
+                    <div class='metric-val' style='color:#e05252;'>{cancel_prob*100:.1f}%</div>
+                    <div class='metric-lbl'>Cancel Risk</div>
+                </div>
+                <div class='metric-box'>
+                    <div class='metric-val' style='color:#4cba7a;'>{stay_prob*100:.1f}%</div>
+                    <div class='metric-lbl'>Retention</div>
+                </div>
+                <div class='metric-box'>
+                    <div class='metric-val' style='color:{a_color};'>{agency_rate*100:.1f}%</div>
+                    <div class='metric-lbl'>Channel Rate</div>
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+            # ── Risk badge & advice ────────────────────────────────────────
+            st.markdown("<br>", unsafe_allow_html=True)
+            if cancel_prob >= 0.75:
+                badge        = "<span class='badge-very-high'>🔴 VERY HIGH RISK</span>"
+                advice       = "Require a non-refundable deposit or full prepayment. Set up an overbooking buffer immediately."
+                border_color = "#c0392b"
+            elif cancel_prob >= 0.52:
+                badge        = "<span class='badge-high'>🔴 HIGH RISK</span>"
+                advice       = "Send a confirmation reminder 1 week before arrival. Consider requesting a partial deposit."
+                border_color = "#a93226"
+            elif cancel_prob >= 0.30:
+                badge        = "<span class='badge-moderate'>🟡 MODERATE RISK</span>"
+                advice       = "Monitor this booking. Follow up if no special requests are added."
+                border_color = "#7a5f28"
+            else:
+                badge        = "<span class='badge-low'>🟢 LOW RISK</span>"
+                advice       = "Booking looks secure. Standard follow-up recommended."
+                border_color = "#1e6b38"
+
+            st.markdown(f"""
+            <div class='risk-badge-wrap'>
+                {badge}
+                <div class='advice-box' style='border-left-color:{border_color};'>
+                    💡 {advice}
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+            with st.expander("📋 Feature Summary"):
+                display_row = dict(feature_row)
+                display_row['adr (₱)'] = round(adr_php, 2)
+                display_row.pop('adr', None)
+                st.dataframe(
+                    pd.DataFrame([display_row]).T.rename(columns={0: "Value"}),
+                    use_container_width=True
+                )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — HISTORY
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_history:
-    st.markdown("<div class='section-label'>Recent Predictions (Last 30)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-label'>Prediction History</div>", unsafe_allow_html=True)
 
-    rows = fetch_latest(30)
+    rows = fetch_latest(500)
+
     if rows:
-        df_hist = pd.DataFrame(rows, columns=[
+        df_all = pd.DataFrame(rows, columns=[
             "ID", "Timestamp", "Hotel", "Lead Time",
-            "Deposit Type", "Country / Channel", "ADR (€)",
+            "Deposit Type", "Country / Channel", "ADR (EUR)",
             "Prediction", "Cancel Probability"
         ])
-        df_hist["Prediction"]         = df_hist["Prediction"].map({1: "⚠ Cancel", 0: "✓ Stay"})
-        df_hist["Cancel Probability"] = (df_hist["Cancel Probability"] * 100).round(1).astype(str) + "%"
-        df_hist["ADR (€)"]            = df_hist["ADR (€)"].map(lambda x: f"€{x:,.2f}")
-        st.dataframe(df_hist, use_container_width=True, hide_index=True)
+        df_all["Timestamp"] = pd.to_datetime(df_all["Timestamp"], errors="coerce")
+        df_all["Date"]      = df_all["Timestamp"].dt.date
 
-        raw_rows = fetch_latest(30)
-        dl_df = pd.DataFrame(raw_rows, columns=[
-            "ID", "Timestamp", "Hotel", "Lead Time",
-            "Deposit Type", "Country / Channel", "ADR", "Prediction", "Cancel Prob"
-        ])
-        st.download_button(
-            label     = "⬇ Download History CSV",
-            data      = dl_df.to_csv(index=False).encode("utf-8"),
-            file_name = "hotel_predictions_history.csv",
-            mime      = "text/csv"
-        )
+        today     = datetime.now().date()
+        min_date  = df_all["Date"].min()
+        max_date  = df_all["Date"].max()
+
+        # ── Session state for filter ─────────────────────────────────────────
+        if "hist_preset"    not in st.session_state: st.session_state["hist_preset"]    = "Today"
+        if "hist_date_from" not in st.session_state: st.session_state["hist_date_from"] = min_date
+        if "hist_date_to"   not in st.session_state: st.session_state["hist_date_to"]   = max_date
+
+        # ── Filter row ───────────────────────────────────────────────────────
+        fc1, fc2, fc3, fc4 = st.columns([2, 2, 2, 1])
+        with fc1:
+            preset = st.selectbox(
+                "Date Range",
+                ["Today", "This Week", "Last Month", "Custom Range"],
+                index=["Today", "This Week", "Last Month", "Custom Range"].index(
+                    st.session_state["hist_preset"]
+                ),
+                key="hist_preset_sel"
+            )
+            st.session_state["hist_preset"] = preset
+        with fc2:
+            pred_filter = st.selectbox("Prediction", ["All", "✓ Stay", "⚠ Cancel"], index=0)
+        with fc3:
+            hotel_filter = st.selectbox(
+                "Hotel Type",
+                ["All"] + sorted(df_all["Hotel"].dropna().unique().tolist()),
+                index=0
+            )
+        with fc4:
+            st.markdown("<div style='margin-top:1.75rem;'></div>", unsafe_allow_html=True)
+            if st.button("✕ Clear", use_container_width=True):
+                st.session_state["hist_preset"]    = "Today"
+                st.session_state["hist_date_from"] = min_date
+                st.session_state["hist_date_to"]   = max_date
+                st.rerun()
+
+        # ── Custom Range pickers (only shown when selected) ──────────────────
+        if preset == "Custom Range":
+            cr1, cr2 = st.columns(2)
+            with cr1:
+                custom_from = st.date_input("From", value=st.session_state["hist_date_from"],
+                                            min_value=min_date, max_value=max_date, key="hist_cf")
+                st.session_state["hist_date_from"] = custom_from
+            with cr2:
+                custom_to = st.date_input("To", value=st.session_state["hist_date_to"],
+                                          min_value=min_date, max_value=max_date, key="hist_ct")
+                st.session_state["hist_date_to"] = custom_to
+            date_from = custom_from
+            date_to   = custom_to
+        elif preset == "Today":
+            date_from = today
+            date_to   = today
+        elif preset == "This Week":
+            date_from = today - pd.Timedelta(days=today.weekday())
+            date_to   = today
+        elif preset == "Last Month":
+            date_from = (today.replace(day=1) - pd.Timedelta(days=1)).replace(day=1)
+            date_to   = today.replace(day=1) - pd.Timedelta(days=1)
+        else:
+            date_from = min_date
+            date_to   = max_date
+
+        # ── Apply all filters ────────────────────────────────────────────────
+        mask        = (df_all["Date"] >= date_from) & (df_all["Date"] <= date_to)
+        df_filtered = df_all[mask].copy()
+        df_filtered["Prediction_label"] = df_filtered["Prediction"].map({1: "⚠ Cancel", 0: "✓ Stay"})
+
+        if pred_filter != "All":
+            df_filtered = df_filtered[df_filtered["Prediction_label"] == pred_filter]
+        if hotel_filter != "All":
+            df_filtered = df_filtered[df_filtered["Hotel"] == hotel_filter]
+
+        # ── Summary stats ────────────────────────────────────────────────────
+        total_f    = len(df_filtered)
+        cancel_f   = int((df_filtered["Prediction"] == 1).sum())
+        stay_f     = total_f - cancel_f
+        avg_prob_f = df_filtered["Cancel Probability"].mean() * 100 if total_f > 0 else 0
+        avg_adr_f  = df_filtered["ADR (EUR)"].mean() * 62 if total_f > 0 else 0
+
+        st.markdown(f"""
+        <div style='display:flex;gap:0.8rem;margin:0.8rem 0 1rem;'>
+            <div class='metric-box' style='flex:1;'>
+                <div class='metric-val' style='color:#d4a84b;'>{total_f}</div>
+                <div class='metric-lbl'>Total</div>
+            </div>
+            <div class='metric-box' style='flex:1;'>
+                <div class='metric-val' style='color:#4cba7a;'>{stay_f}</div>
+                <div class='metric-lbl'>Stay</div>
+            </div>
+            <div class='metric-box' style='flex:1;'>
+                <div class='metric-val' style='color:#e05252;'>{cancel_f}</div>
+                <div class='metric-lbl'>Cancel</div>
+            </div>
+            <div class='metric-box' style='flex:1;'>
+                <div class='metric-val' style='color:#d4a84b;'>{avg_prob_f:.1f}%</div>
+                <div class='metric-lbl'>Avg Risk</div>
+            </div>
+            <div class='metric-box' style='flex:1;'>
+                <div class='metric-val' style='color:#d4a84b;'>₱{avg_adr_f:,.0f}</div>
+                <div class='metric-lbl'>Avg ADR</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if total_f == 0:
+            st.markdown("""
+            <div class='placeholder-box' style='padding:1.5rem;'>
+                <div style='font-size:0.9rem;color:#4a6275;'>No records match the selected filters.</div>
+            </div>""", unsafe_allow_html=True)
+        else:
+            df_display = df_filtered[[
+                "ID", "Timestamp", "Hotel", "Lead Time",
+                "Deposit Type", "Country / Channel", "ADR (EUR)",
+                "Prediction_label", "Cancel Probability"
+            ]].copy()
+            df_display.rename(columns={"Prediction_label": "Prediction"}, inplace=True)
+            df_display["Timestamp"]          = df_display["Timestamp"].dt.strftime("%Y-%m-%d %H:%M")
+            df_display["ADR (₱)"]            = df_display["ADR (EUR)"].apply(lambda x: f"₱{x*62:,.0f}")
+            df_display["Cancel Probability"] = (df_display["Cancel Probability"] * 100).round(1).astype(str) + "%"
+            df_display.drop(columns=["ADR (EUR)"], inplace=True)
+
+            st.dataframe(df_display, use_container_width=True, hide_index=True)
+
+            dl_df = df_filtered[[
+                "ID", "Timestamp", "Hotel", "Lead Time",
+                "Deposit Type", "Country / Channel", "ADR (EUR)",
+                "Prediction_label", "Cancel Probability"
+            ]].copy()
+            dl_df.rename(columns={"Prediction_label": "Prediction"}, inplace=True)
+            dl_df["ADR (₱)"]            = dl_df["ADR (EUR)"].apply(lambda x: round(x * 62, 2))
+            dl_df["Cancel Probability"] = (dl_df["Cancel Probability"] * 100).round(1)
+            dl_df["Timestamp"]          = dl_df["Timestamp"].astype(str)
+            dl_df.drop(columns=["ADR (EUR)"], inplace=True)
+
+            st.download_button(
+                label     = "⬇ Download Filtered CSV",
+                data      = dl_df.to_csv(index=False).encode("utf-8"),
+                file_name = f"hotel_predictions_{date_from}_to_{date_to}.csv",
+                mime      = "text/csv"
+            )
     else:
         st.markdown("""
-        <div style='background:#162230;border:1px dashed #2a3a4a;border-radius:12px;
-                    padding:2rem;text-align:center;color:#4a6070;'>
-            <div style='font-size:1.5rem;margin-bottom:0.4rem;'>🕓</div>
-            <div style='font-size:0.9rem;'>No predictions yet.<br>
-            Make a prediction in the <strong style="color:#c9a96e">Predict</strong> tab first.</div>
+        <div class='placeholder-box'>
+            <div style='font-size:0.9rem;color:#4a6275;line-height:1.7;'>
+                No predictions yet.<br>
+                Make a prediction in the <strong style="color:#d4a84b;">Predict</strong> tab first.
+            </div>
         </div>""", unsafe_allow_html=True)
