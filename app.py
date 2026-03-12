@@ -211,7 +211,6 @@ html, body, [class*="css"] {
     background: radial-gradient(ellipse at center, rgba(76,186,122,0.06) 0%, transparent 60%);
     pointer-events: none;
 }
-.result-icon { font-size: 2rem; margin-bottom: 0.4rem; }
 .result-verdict {
     font-family: 'Cormorant Garamond', serif;
     font-size: 1.9rem;
@@ -333,7 +332,6 @@ html, body, [class*="css"] {
     text-align: center;
     color: var(--text-muted);
 }
-.placeholder-icon { font-size: 2.5rem; margin-bottom: 0.7rem; opacity: 0.5; }
 
 /* ─── Button ─── */
 .stButton > button {
@@ -506,10 +504,10 @@ COUNTRY_OPTIONS  = sorted(COUNTRY_CANCEL_RATES.keys())
 AGENCY_OPTIONS   = list(AGENCY_RATES.keys())
 
 # ── ADR in PHP (approx. 1 EUR ≈ 62 PHP) ──────────────────────────────────────
-ADR_CURRENCY     = "₱"
-ADR_LABEL        = "ADR (₱)"
-ADR_MAX          = 31620.0   # ≈ €510
-ADR_STEP         = 100.0
+ADR_CURRENCY = "₱"
+ADR_LABEL    = "ADR (₱)"
+ADR_MAX      = 31620.0   # ≈ €510
+ADR_STEP     = 100.0
 
 
 # ── Download helpers ──────────────────────────────────────────────────────────
@@ -532,7 +530,7 @@ def load_artifacts():
     return model, scaler
 
 
-# ── Prediction helper ─────────────────────────────────────────────────────────
+# ── Prediction helper (from Code 1) ──────────────────────────────────────────
 def predict(model, scaler, raw: dict):
     total_past        = raw['previous_cancellations'] + raw['previous_bookings_not_canceled']
     cancellation_rate = raw['previous_cancellations'] / (total_past + 1)
@@ -563,10 +561,6 @@ def predict(model, scaler, raw: dict):
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 init_db()
-
-# Session state — prediction result persists only after explicit button click
-if 'prediction_result' not in st.session_state:
-    st.session_state.prediction_result = None
 
 try:
     model, scaler = load_artifacts()
@@ -621,8 +615,6 @@ with st.sidebar:
     st.markdown("<div class='section-label'>Session Stats</div>", unsafe_allow_html=True)
     stats = fetch_stats()
     total, n_canceled, avg_prob, avg_adr = stats if stats and stats[0] else (0, 0, 0.0, 0.0)
-
-    # Convert avg_adr from EUR to PHP for display
     avg_adr_php = round((avg_adr or 0) * 62, 2)
 
     st.markdown(f"""
@@ -691,19 +683,15 @@ with tab_predict:
             lead_time       = st.number_input("Lead Time (days)", min_value=0, max_value=737, value=None, step=1, placeholder="Enter days...")
             booking_changes = st.number_input("Booking Changes",  min_value=0, max_value=20,  value=None, step=1, placeholder="Enter number...")
         with c3:
-            # ADR input with comma formatting on change
             if "adr_input" not in st.session_state:
                 st.session_state["adr_input"] = ""
 
             def _fmt_adr():
-                raw = st.session_state["adr_input"].replace(",", "").strip()
-                if raw:
+                raw_val = st.session_state["adr_input"].replace(",", "").strip()
+                if raw_val:
                     try:
-                        val = float(raw)
-                        if val >= 1000:
-                            st.session_state["adr_input"] = f"{val:,.0f}"
-                        else:
-                            st.session_state["adr_input"] = f"{val:.0f}"
+                        val = float(raw_val)
+                        st.session_state["adr_input"] = f"{val:,.0f}" if val >= 1000 else f"{val:.0f}"
                     except ValueError:
                         pass
 
@@ -731,7 +719,7 @@ with tab_predict:
                 )
             parking = st.number_input("Parking Spaces", min_value=0, max_value=8, value=None, step=1, placeholder="Enter number...")
 
-        # Convert PHP back to EUR for model (model was trained on EUR)
+        # Convert PHP → EUR for model (trained on EUR)
         adr_eur = (adr_php / 62.0) if adr_php is not None else None
 
         # ── Guest Origin ──────────────────────────────────────────────────────
@@ -843,30 +831,30 @@ with tab_predict:
             if not model_ok:
                 st.error(f"Model not loaded: {model_err}")
             else:
-                # ── Validate all fields are filled ─────────────────────────
+                # ── Validate required fields (from Code 2) ─────────────────
                 missing = []
-                if hotel        is None: missing.append("Hotel Type")
-                if deposit_type is None: missing.append("Deposit Type")
-                if lead_time    is None: missing.append("Lead Time")
+                if hotel          is None: missing.append("Hotel Type")
+                if deposit_type   is None: missing.append("Deposit Type")
+                if lead_time      is None: missing.append("Lead Time")
                 if booking_changes is None: missing.append("Booking Changes")
-                if adr_php      is None: missing.append("ADR (₱)")
-                if parking      is None: missing.append("Parking Spaces")
-                if country      is None: missing.append("Country of Origin")
-                if agency_type  is None: missing.append("Booking Channel")
-                if total_nights is None: missing.append("Total Nights")
-                if total_guests is None: missing.append("Total Guests")
-                if special_req  is None: missing.append("Special Requests")
-                if got_requested is None: missing.append("Got Requested Room?")
-                if is_repeated  is None: missing.append("Repeated Guest?")
-                if prev_cancel  is None: missing.append("Previous Cancellations")
-                if prev_ok      is None: missing.append("Previous Bookings (Kept)")
+                if adr_php        is None: missing.append("ADR (₱)")
+                if parking        is None: missing.append("Parking Spaces")
+                if country        is None: missing.append("Country of Origin")
+                if agency_type    is None: missing.append("Booking Channel")
+                if total_nights   is None: missing.append("Total Nights")
+                if total_guests   is None: missing.append("Total Guests")
+                if special_req    is None: missing.append("Special Requests")
+                if got_requested  is None: missing.append("Got Requested Room?")
+                if is_repeated    is None: missing.append("Repeated Guest?")
+                if prev_cancel    is None: missing.append("Previous Cancellations")
+                if prev_ok        is None: missing.append("Previous Bookings (Kept)")
 
                 if missing:
                     st.warning(f"⚠ Please fill in all required fields: **{', '.join(missing)}**")
                 else:
                     raw = {
                         'lead_time'                     : lead_time,
-                        'adr'                           : adr_eur,
+                        'adr'                           : adr_eur,          # EUR for model
                         'total_of_special_requests'     : special_req,
                         'required_car_parking_spaces'   : parking,
                         'booking_changes'               : booking_changes,
@@ -881,10 +869,11 @@ with tab_predict:
                         'country_cancel_rate'           : COUNTRY_CANCEL_RATES.get(country, GLOBAL_MEAN),
                     }
 
+                    # ── Run prediction (Code 1 logic) ──────────────────────
                     cancel_prob, prediction, feature_row = predict(model, scaler, raw)
                     stay_prob = 1 - cancel_prob
 
-                    # Save to DB (store ADR in EUR for consistency)
+                    # Save to DB (ADR stored in EUR for consistency)
                     insert_prediction(
                         created_at     = datetime.now().isoformat(timespec="seconds"),
                         hotel          = hotel,
@@ -897,25 +886,91 @@ with tab_predict:
                         cancel_prob    = round(cancel_prob, 4),
                     )
 
-                    # Resolve display colors for agency
+                    # Agency colour for metrics
                     agency_rate_val = AGENCY_RATES[agency_type]
-                    a_color_val = "#e05252" if agency_rate_val > 0.35 else "#d4a84b" if agency_rate_val > 0.25 else "#4cba7a"
+                    a_color_val = (
+                        "#e05252" if agency_rate_val > 0.35
+                        else "#d4a84b" if agency_rate_val > 0.25
+                        else "#4cba7a"
+                    )
 
-                    # Store result in session state
-                    st.session_state.prediction_result = {
-                        'cancel_prob'  : cancel_prob,
-                        'stay_prob'    : stay_prob,
-                        'prediction'   : prediction,
-                        'feature_row'  : feature_row,
-                        'adr_php'      : adr_php,
-                        'agency_rate'  : agency_rate_val,
-                        'a_color'      : a_color_val,
-                    }
+                    # ── Result display (Code 1 flow, Code 2 styling) ───────
+                    if prediction == 1:
+                        st.markdown(f"""
+                        <div class='result-cancel'>
+                            <div class='result-verdict' style='color:#e05252;'>⚠ Likely to Cancel</div>
+                            <div class='result-prob' style='color:#e05252;'>{cancel_prob*100:.1f}%</div>
+                            <div class='result-label'>cancellation probability</div>
+                        </div>""", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                        <div class='result-no-cancel'>
+                            <div class='result-verdict' style='color:#4cba7a;'>✓ Likely to Stay</div>
+                            <div class='result-prob' style='color:#4cba7a;'>{stay_prob*100:.1f}%</div>
+                            <div class='result-label'>retention probability</div>
+                        </div>""", unsafe_allow_html=True)
 
-        # ── Display result from session state only ─────────────────────────
-        res = st.session_state.prediction_result
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown(
+                        "<div style='font-size:0.72rem;color:#4a6275;margin-bottom:0.4rem;"
+                        "letter-spacing:0.08em;text-transform:uppercase;'>Cancellation Probability</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.progress(cancel_prob)
 
-        if res is None:
+                    st.markdown(f"""
+                    <div class='metric-row'>
+                        <div class='metric-box'>
+                            <div class='metric-val' style='color:#e05252;'>{cancel_prob*100:.1f}%</div>
+                            <div class='metric-lbl'>Cancel Risk</div>
+                        </div>
+                        <div class='metric-box'>
+                            <div class='metric-val' style='color:#4cba7a;'>{stay_prob*100:.1f}%</div>
+                            <div class='metric-lbl'>Retention</div>
+                        </div>
+                        <div class='metric-box'>
+                            <div class='metric-val' style='color:{a_color_val};'>{agency_rate_val*100:.1f}%</div>
+                            <div class='metric-lbl'>Channel Rate</div>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+
+                    # ── Risk badge & advice (Code 1 thresholds + labels) ───
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if cancel_prob >= 0.75:
+                        badge        = "<span class='badge-very-high'>🔴 VERY HIGH RISK</span>"
+                        advice       = "Require a non-refundable deposit or full prepayment. Set up an overbooking buffer."
+                        border_color = "#c0392b"
+                    elif cancel_prob >= 0.52:
+                        badge        = "<span class='badge-high'>🔴 HIGH RISK</span>"
+                        advice       = "Send a confirmation reminder 1 week before arrival. Consider requesting a partial deposit."
+                        border_color = "#a93226"
+                    elif cancel_prob >= 0.30:
+                        badge        = "<span class='badge-moderate'>🟡 MODERATE RISK</span>"
+                        advice       = "Monitor this booking. Follow up if no special requests are added."
+                        border_color = "#7a5f28"
+                    else:
+                        badge        = "<span class='badge-low'>🟢 LOW RISK</span>"
+                        advice       = "Booking looks secure. Standard follow-up recommended."
+                        border_color = "#1e6b38"
+
+                    st.markdown(f"""
+                    <div class='risk-badge-wrap'>
+                        {badge}
+                        <div class='advice-box' style='border-left-color:{border_color};'>
+                            💡 {advice}
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+
+                    with st.expander("📋 Feature Summary"):
+                        display_row = dict(feature_row)
+                        display_row['adr (₱)'] = round(adr_php, 2)
+                        display_row.pop('adr', None)
+                        st.dataframe(
+                            pd.DataFrame([display_row]).T.rename(columns={0: "Value"}),
+                            use_container_width=True
+                        )
+
+        else:
             st.markdown("""
             <div class='placeholder-box'>
                 <div style='font-size:0.9rem;color:#4a6275;line-height:1.7;'>
@@ -923,89 +978,6 @@ with tab_predict:
                     and click <strong style="color:#d4a84b;">Predict</strong> to assess risk.
                 </div>
             </div>""", unsafe_allow_html=True)
-        else:
-            cancel_prob  = res['cancel_prob']
-            stay_prob    = res['stay_prob']
-            prediction   = res['prediction']
-            feature_row  = res['feature_row']
-            adr_php      = res['adr_php']
-            agency_rate  = res['agency_rate']
-            a_color      = res['a_color']
-
-            # ── Result display ─────────────────────────────────────────────
-            if prediction == 1:
-                st.markdown(f"""
-                <div class='result-cancel'>
-                    <div class='result-verdict' style='color:#e05252;'>⚠ Likely to Cancel</div>
-                    <div class='result-prob' style='color:#e05252;'>{cancel_prob*100:.1f}%</div>
-                    <div class='result-label'>cancellation probability</div>
-                </div>""", unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div class='result-no-cancel'>
-                    <div class='result-verdict' style='color:#4cba7a;'>✓ Likely to Stay</div>
-                    <div class='result-prob' style='color:#4cba7a;'>{stay_prob*100:.1f}%</div>
-                    <div class='result-label'>retention probability</div>
-                </div>""", unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown(
-                "<div style='font-size:0.72rem;color:#4a6275;margin-bottom:0.4rem;letter-spacing:0.08em;text-transform:uppercase;'>Cancellation Probability</div>",
-                unsafe_allow_html=True
-            )
-            st.progress(cancel_prob)
-
-            st.markdown(f"""
-            <div class='metric-row'>
-                <div class='metric-box'>
-                    <div class='metric-val' style='color:#e05252;'>{cancel_prob*100:.1f}%</div>
-                    <div class='metric-lbl'>Cancel Risk</div>
-                </div>
-                <div class='metric-box'>
-                    <div class='metric-val' style='color:#4cba7a;'>{stay_prob*100:.1f}%</div>
-                    <div class='metric-lbl'>Retention</div>
-                </div>
-                <div class='metric-box'>
-                    <div class='metric-val' style='color:{a_color};'>{agency_rate*100:.1f}%</div>
-                    <div class='metric-lbl'>Channel Rate</div>
-                </div>
-            </div>""", unsafe_allow_html=True)
-
-            # ── Risk badge & advice ────────────────────────────────────────
-            st.markdown("<br>", unsafe_allow_html=True)
-            if cancel_prob >= 0.75:
-                badge        = "<span class='badge-very-high'>🔴 VERY HIGH RISK</span>"
-                advice       = "Require a non-refundable deposit or full prepayment. Set up an overbooking buffer immediately."
-                border_color = "#c0392b"
-            elif cancel_prob >= 0.52:
-                badge        = "<span class='badge-high'>🔴 HIGH RISK</span>"
-                advice       = "Send a confirmation reminder 1 week before arrival. Consider requesting a partial deposit."
-                border_color = "#a93226"
-            elif cancel_prob >= 0.30:
-                badge        = "<span class='badge-moderate'>🟡 MODERATE RISK</span>"
-                advice       = "Monitor this booking. Follow up if no special requests are added."
-                border_color = "#7a5f28"
-            else:
-                badge        = "<span class='badge-low'>🟢 LOW RISK</span>"
-                advice       = "Booking looks secure. Standard follow-up recommended."
-                border_color = "#1e6b38"
-
-            st.markdown(f"""
-            <div class='risk-badge-wrap'>
-                {badge}
-                <div class='advice-box' style='border-left-color:{border_color};'>
-                    💡 {advice}
-                </div>
-            </div>""", unsafe_allow_html=True)
-
-            with st.expander("📋 Feature Summary"):
-                display_row = dict(feature_row)
-                display_row['adr (₱)'] = round(adr_php, 2)
-                display_row.pop('adr', None)
-                st.dataframe(
-                    pd.DataFrame([display_row]).T.rename(columns={0: "Value"}),
-                    use_container_width=True
-                )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1025,17 +997,42 @@ with tab_history:
         df_all["Timestamp"] = pd.to_datetime(df_all["Timestamp"], errors="coerce")
         df_all["Date"]      = df_all["Timestamp"].dt.date
 
-        today     = datetime.now().date()
-        min_date  = df_all["Date"].min()
-        max_date  = df_all["Date"].max()
+        today    = datetime.now().date()
+        min_date = df_all["Date"].min()
+        max_date = df_all["Date"].max()
 
         # ── Session state for filter ─────────────────────────────────────────
-        if "hist_preset"    not in st.session_state: st.session_state["hist_preset"]    = "Today"
-        if "hist_date_from" not in st.session_state: st.session_state["hist_date_from"] = min_date
-        if "hist_date_to"   not in st.session_state: st.session_state["hist_date_to"]   = max_date
+        if "hist_preset"       not in st.session_state: st.session_state["hist_preset"]       = "Today"
+        if "hist_date_from"    not in st.session_state: st.session_state["hist_date_from"]    = min_date
+        if "hist_date_to"      not in st.session_state: st.session_state["hist_date_to"]      = max_date
+        if "hist_pred_filter"  not in st.session_state: st.session_state["hist_pred_filter"]  = "All"
+        if "hist_hotel_filter" not in st.session_state: st.session_state["hist_hotel_filter"] = "All"
+
+        # ── Clear button CSS ─────────────────────────────────────────────────
+        st.markdown("""
+        <style>
+        div[data-testid="stButton"].clear-btn > button {
+            background: transparent !important;
+            border: 1px solid #2a3a4a !important;
+            color: #8fa8c0 !important;
+            font-size: 0.72rem !important;
+            padding: 0.3rem 0.7rem !important;
+            border-radius: 6px !important;
+            width: auto !important;
+            box-shadow: none !important;
+            letter-spacing: 0.05em;
+        }
+        div[data-testid="stButton"].clear-btn > button:hover {
+            border-color: #e05252 !important;
+            color: #e05252 !important;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
         # ── Filter row ───────────────────────────────────────────────────────
-        fc1, fc2, fc3, fc4 = st.columns([2, 2, 2, 1])
+        fc1, fc2, fc3, fc4 = st.columns([2.5, 2, 2, 0.8])
         with fc1:
             preset = st.selectbox(
                 "Date Range",
@@ -1046,23 +1043,42 @@ with tab_history:
                 key="hist_preset_sel"
             )
             st.session_state["hist_preset"] = preset
+
         with fc2:
-            pred_filter = st.selectbox("Prediction", ["All", "✓ Stay", "⚠ Cancel"], index=0)
+            pred_filter = st.selectbox(
+                "Prediction",
+                ["All", "✓ Stay", "⚠ Cancel"],
+                index=["All", "✓ Stay", "⚠ Cancel"].index(st.session_state["hist_pred_filter"]),
+                key="hist_pred_sel"
+            )
+            st.session_state["hist_pred_filter"] = pred_filter
+
         with fc3:
+            hotel_options = ["All"] + sorted(df_all["Hotel"].dropna().unique().tolist())
+            hotel_idx = hotel_options.index(st.session_state["hist_hotel_filter"]) \
+                        if st.session_state["hist_hotel_filter"] in hotel_options else 0
             hotel_filter = st.selectbox(
                 "Hotel Type",
-                ["All"] + sorted(df_all["Hotel"].dropna().unique().tolist()),
-                index=0
+                hotel_options,
+                index=hotel_idx,
+                key="hist_hotel_sel"
             )
+            st.session_state["hist_hotel_filter"] = hotel_filter
+
         with fc4:
-            st.markdown("<div style='margin-top:1.75rem;'></div>", unsafe_allow_html=True)
-            if st.button("✕ Clear", use_container_width=True):
-                st.session_state["hist_preset"]    = "Today"
-                st.session_state["hist_date_from"] = min_date
-                st.session_state["hist_date_to"]   = max_date
+            st.markdown("<div style='margin-top:1.78rem;'></div>", unsafe_allow_html=True)
+            st.markdown('<div data-testid="stButton" class="clear-btn">', unsafe_allow_html=True)
+            clear_clicked = st.button("✕ Clear", key="hist_clear")
+            st.markdown('</div>', unsafe_allow_html=True)
+            if clear_clicked:
+                st.session_state["hist_preset"]       = "Today"
+                st.session_state["hist_date_from"]    = min_date
+                st.session_state["hist_date_to"]      = max_date
+                st.session_state["hist_pred_filter"]  = "All"
+                st.session_state["hist_hotel_filter"] = "All"
                 st.rerun()
 
-        # ── Custom Range pickers (only shown when selected) ──────────────────
+        # ── Custom Range pickers ─────────────────────────────────────────────
         if preset == "Custom Range":
             cr1, cr2 = st.columns(2)
             with cr1:
@@ -1088,7 +1104,7 @@ with tab_history:
             date_from = min_date
             date_to   = max_date
 
-        # ── Apply all filters ────────────────────────────────────────────────
+        # ── Apply filters ────────────────────────────────────────────────────
         mask        = (df_all["Date"] >= date_from) & (df_all["Date"] <= date_to)
         df_filtered = df_all[mask].copy()
         df_filtered["Prediction_label"] = df_filtered["Prediction"].map({1: "⚠ Cancel", 0: "✓ Stay"})
