@@ -701,61 +701,59 @@ with tab1:
         st.markdown("<div class='section-label'>Booking Details</div>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1:
-            lead_time       = st.number_input("Lead Time (days)",    min_value=0,   max_value=1000, value=60)
-            arrival_year    = st.selectbox("Arrival Year",           [2015, 2016, 2017], index=2)
+            lead_time       = st.number_input("Lead Time (days)",    min_value=0,   max_value=1000, value=None)
+            arrival_year    = st.selectbox("Arrival Year",           [2015, 2016, 2017], index=None, placeholder="Select year...")
         with c2:
-            adr             = st.number_input("ADR ($)",             min_value=0.0, max_value=5000.0, value=100.0)
-            arrival_day     = st.number_input("Arrival Day of Month",min_value=1,   max_value=31, value=15)
+            adr             = st.number_input("ADR ($)",             min_value=0.0, max_value=5000.0, value=None)
+            arrival_day     = st.number_input("Arrival Day of Month",min_value=1,   max_value=31, value=None)
         with c3:
-            no_deposit      = st.selectbox("No Deposit?",            ["Yes", "No"])
-            days_in_waiting = st.number_input("Days in Waiting List",min_value=0,   max_value=400, value=0)
+            no_deposit      = st.selectbox("No Deposit?",            ["Yes", "No"], index=None, placeholder="Select...")
+            days_in_waiting = st.number_input("Days in Waiting List",min_value=0,   max_value=400, value=None)
 
         # ── Stay Duration ─────────────────────────────────────────────────────
         st.markdown("<div class='section-label'>Stay Duration</div>", unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
-            week_nights    = st.number_input("Week Nights",    min_value=0, max_value=50, value=3)
+            week_nights    = st.number_input("Week Nights",    min_value=0, max_value=50, value=None)
         with c2:
-            weekend_nights = st.number_input("Weekend Nights", min_value=0, max_value=20, value=1)
+            weekend_nights = st.number_input("Weekend Nights", min_value=0, max_value=20, value=None)
 
-        # Derived
-        total_nights  = week_nights + weekend_nights
+        # Derived (safe with None)
+        total_nights  = (week_nights or 0) + (weekend_nights or 0)
         deposit_type  = "No Deposit" if no_deposit == "Yes" else "Non Refund"
 
         # ── Guest Composition ─────────────────────────────────────────────────
         st.markdown("<div class='section-label'>Guest Composition</div>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1:
-            adults   = st.number_input("Adults",   min_value=1, max_value=10, value=2)
+            adults   = st.number_input("Adults",   min_value=1, max_value=10, value=None)
         with c2:
-            children = st.number_input("Children", min_value=0, max_value=10, value=0)
+            children = st.number_input("Children", min_value=0, max_value=10, value=None)
         with c3:
-            babies   = st.number_input("Babies",   min_value=0, max_value=10, value=0)
+            babies   = st.number_input("Babies",   min_value=0, max_value=10, value=None)
 
-        # Derived
-        total_guests = adults + children + babies
-        is_family    = int(children > 0 or babies > 0)
+        # Derived (safe with None)
+        total_guests = (adults or 0) + (children or 0) + (babies or 0)
+        is_family    = int((children or 0) > 0 or (babies or 0) > 0)
 
         # ── Guest History ─────────────────────────────────────────────────────
         st.markdown("<div class='section-label'>Guest History</div>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1:
-            got_requested_room         = st.selectbox("Got Requested Room?", ROOM_OPTIONS)
+            got_requested_room         = st.selectbox("Got Requested Room?", ROOM_OPTIONS, index=None, placeholder="Select...")
         with c2:
-            previous_cancellations     = st.number_input("Previous Cancellations",  min_value=0, max_value=50, value=0)
+            previous_cancellations     = st.number_input("Previous Cancellations",  min_value=0, max_value=50, value=None)
         with c3:
-            previous_bookings_not_canceled = st.number_input("Prev. Bookings Kept", min_value=0, max_value=50, value=0)
+            previous_bookings_not_canceled = st.number_input("Prev. Bookings Kept", min_value=0, max_value=50, value=None)
 
         # ── Cancel Rates ──────────────────────────────────────────────────────
         st.markdown("<div class='section-label'>Cancellation Rates</div>", unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
-            agent_cancel_rate   = st.number_input(
-                f"Agent Cancel Rate  [global = {GLOBAL_MEAN}]",
-                min_value=0.0, max_value=1.0,
-                value=round(GLOBAL_MEAN, 3), step=0.001, format="%.3f"
-            )
-            country             = st.selectbox("Country of Origin", COUNTRY_OPTIONS)
+            # Booking channel drives agent cancel rate automatically
+            booking_channel     = st.selectbox("Booking Channel", AGENCY_OPTIONS, index=None, placeholder="Select booking channel...")
+            agent_cancel_rate   = AGENCY_RATES[booking_channel] if booking_channel else GLOBAL_MEAN
+            country             = st.selectbox("Country of Origin", COUNTRY_OPTIONS, index=None, placeholder="Select country...")
             country_cancel_rate = COUNTRY_CANCEL_RATES.get(country, GLOBAL_MEAN)
         with c2:
             c_color = "#e05252" if country_cancel_rate > 0.35 else "#d4a84b" if country_cancel_rate > 0.25 else "#4cba7a"
@@ -767,7 +765,7 @@ with tab1:
                     <div class='rate-value' style='color:{c_color};'>{country_cancel_rate*100:.1f}%</div>
                 </div>
                 <div class='rate-box'>
-                    <div class='rate-label'>Agent Cancel Rate</div>
+                    <div class='rate-label'>Agent Cancel Rate (Auto)</div>
                     <div class='rate-value' style='color:{a_color};'>{agent_cancel_rate*100:.1f}%</div>
                 </div>
             </div>
@@ -782,29 +780,53 @@ with tab1:
             if not model_ok:
                 st.error(f"Model not loaded: {model_err}")
             else:
-                raw_input = {
-                    # Direct inputs
-                    'lead_time'                     : lead_time,
-                    'adr'                           : adr,
-                    'adults'                        : adults,
-                    'children'                      : children,
-                    'babies'                        : babies,
-                    'stays_in_week_nights'          : week_nights,
-                    'stays_in_weekend_nights'       : weekend_nights,
-                    'total_nights'                  : total_nights,
-                    'arrival_date_year'             : arrival_year,
-                    'arrival_date_day_of_month'     : arrival_day,
-                    'days_in_waiting_list'          : days_in_waiting,
-                    'previous_cancellations'        : previous_cancellations,
-                    'previous_bookings_not_canceled': previous_bookings_not_canceled,
-                    'got_requested_room'            : 1 if got_requested_room == "Yes" else 0,
-                    'deposit_type'                  : deposit_type,
-                    'agent_cancel_rate'             : agent_cancel_rate,
-                    'country_cancel_rate'           : country_cancel_rate,
-                }
+                # ── Validate all required fields ──────────────────────
+                missing = []
+                if lead_time          is None: missing.append("Lead Time")
+                if adr                is None: missing.append("ADR")
+                if arrival_year       is None: missing.append("Arrival Year")
+                if arrival_day        is None: missing.append("Arrival Day of Month")
+                if no_deposit         is None: missing.append("No Deposit?")
+                if days_in_waiting    is None: missing.append("Days in Waiting List")
+                if week_nights        is None: missing.append("Week Nights")
+                if weekend_nights     is None: missing.append("Weekend Nights")
+                if adults             is None: missing.append("Adults")
+                if children           is None: missing.append("Children")
+                if babies             is None: missing.append("Babies")
+                if got_requested_room is None: missing.append("Got Requested Room?")
+                if previous_cancellations        is None: missing.append("Previous Cancellations")
+                if previous_bookings_not_canceled is None: missing.append("Prev. Bookings Kept")
+                if booking_channel    is None: missing.append("Booking Channel")
+                if country            is None: missing.append("Country of Origin")
 
-                prob, pred, features = predict(model, scaler, raw_input)
-                stay_prob = 1 - prob
+                if missing:
+                    st.warning(f"⚠ Please fill in all required fields: **{', '.join(missing)}**")
+                else:
+                    country_cancel_rate = COUNTRY_CANCEL_RATES.get(country, GLOBAL_MEAN)
+
+                    raw_input = {
+                        # Direct inputs
+                        'lead_time'                     : lead_time,
+                        'adr'                           : adr,
+                        'adults'                        : adults,
+                        'children'                      : children,
+                        'babies'                        : babies,
+                        'stays_in_week_nights'          : week_nights,
+                        'stays_in_weekend_nights'       : weekend_nights,
+                        'total_nights'                  : total_nights,
+                        'arrival_date_year'             : arrival_year,
+                        'arrival_date_day_of_month'     : arrival_day,
+                        'days_in_waiting_list'          : days_in_waiting,
+                        'previous_cancellations'        : previous_cancellations,
+                        'previous_bookings_not_canceled': previous_bookings_not_canceled,
+                        'got_requested_room'            : 1 if got_requested_room == "Yes" else 0,
+                        'deposit_type'                  : deposit_type,
+                        'agent_cancel_rate'             : agent_cancel_rate,
+                        'country_cancel_rate'           : country_cancel_rate,
+                    }
+
+                    prob, pred, features = predict(model, scaler, raw_input)
+                    stay_prob = 1 - prob
 
                 # ── Result card ───────────────────────────────────────────────
                 if pred == 1:
@@ -885,9 +907,9 @@ with tab1:
                         insert_prediction(
                             created_at                     = datetime.now().isoformat(timespec="seconds"),
                             hotel                          = "City Hotel",
-                            market_segment                 = country,
+                            market_segment                 = f"{country} / {booking_channel or 'Direct'}",
                             deposit_type                   = deposit_type,
-                            distribution_channel           = "Direct",
+                            distribution_channel           = booking_channel or "Direct",
                             customer_type                  = "Transient",
                             lead_time                      = lead_time,
                             adr                            = adr,
