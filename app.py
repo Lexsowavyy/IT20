@@ -6,7 +6,6 @@ from pathlib import Path
 
 import gdown
 import joblib
-import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -143,17 +142,6 @@ html, body, [class*="css"] {
     height: 1px;
     background: linear-gradient(90deg, var(--border-light), transparent);
 }
-
-/* ─── Cards ─── */
-.card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.2rem 1.4rem;
-    margin-bottom: 0.8rem;
-    transition: border-color 0.2s;
-}
-.card:hover { border-color: var(--border-light); }
 
 /* ─── Info Card (sidebar) ─── */
 .info-card {
@@ -360,7 +348,8 @@ html, body, [class*="css"] {
 
 /* ─── Inputs ─── */
 .stSelectbox > div > div,
-.stNumberInput > div > div > input {
+.stNumberInput > div > div > input,
+.stSlider > div { 
     background-color: var(--bg-elevated) !important;
     border: 1px solid var(--border-light) !important;
     color: var(--text-primary) !important;
@@ -397,24 +386,6 @@ html, body, [class*="css"] {
 /* ─── Labels ─── */
 label { color: var(--text-secondary) !important; font-size: 0.82rem !important; font-weight: 400 !important; }
 
-/* ─── Divider ─── */
-.gold-divider {
-    border: none;
-    border-top: 1px solid var(--border);
-    margin: 0.5rem 0 1.5rem;
-    position: relative;
-}
-.gold-divider::after {
-    content: '◆';
-    position: absolute;
-    left: 50%; top: -0.55rem;
-    transform: translateX(-50%);
-    color: var(--gold-dim);
-    font-size: 0.6rem;
-    background: var(--bg-deep);
-    padding: 0 0.4rem;
-}
-
 /* ─── Sidebar brand ─── */
 .brand-wrap { padding: 0.8rem 0 1.2rem; }
 .brand-name {
@@ -425,9 +396,15 @@ label { color: var(--text-secondary) !important; font-size: 0.82rem !important; 
     letter-spacing: 0.03em;
     line-height: 1;
 }
-.brand-sub { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.brand-sub {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
 
-/* ─── Stats row ─── */
+/* ─── Stats pill ─── */
 .stat-pill {
     display: flex;
     justify-content: space-between;
@@ -460,19 +437,35 @@ label { color: var(--text-secondary) !important; font-size: 0.82rem !important; 
 GLOBAL_MEAN = 0.2749
 BEST_THRESH = 0.5201
 
-MODEL_FILE_ID  = "1jC7qsZQyGZYf3cLoP_zFizreeox2tNsI"
-SCALER_FILE_ID = "1eD2cW46mu2ag8XD57y5Pvmehjrfi8feF"
+MODEL_FILE_ID  = "18MmdDol6tbTwAQc_WK16Xbi_yrd_1ndh"
+SCALER_FILE_ID = "1CxgQJ1jZEuMbDkxEH9Z6TAISbKnOEFMs"
 
 ROOT        = Path(__file__).resolve().parent
 MODEL_PATH  = ROOT / "models" / "hotel_model.pkl"
-SCALER_PATH = ROOT / "models" / "hotel_scaler.pkl"
+SCALER_PATH = ROOT / "models" / "hotel_scaler(1).pkl"
 
+# ── FEATURE_NAMES: must match EXACTLY what the .pkl was trained on ───────────
+# Source: db.py header comment — 19 model features
 FEATURE_NAMES = [
-    'lead_time', 'adr', 'total_of_special_requests',
-    'required_car_parking_spaces', 'booking_changes',
-    'is_repeated_guest', 'total_nights', 'total_guests',
-    'got_requested_room', 'cancellation_rate',
-    'lead_x_no_deposit', 'agent_cancel_rate', 'country_cancel_rate'
+    'agent_cancel_rate',
+    'same_room',
+    'country_cancel_rate',
+    'lead_time',
+    'cancellation_rate',
+    'lead_x_no_deposit',
+    'adr',
+    'total_guests',
+    'arrival_date_year',
+    'total_nights',
+    'stays_in_week_nights',
+    'adults',
+    'children',
+    'stays_in_weekend_nights',
+    'is_family',
+    'previous_cancellations',
+    'adr_per_night',
+    'arrival_date_day_of_month',
+    'days_in_waiting_list',
 ]
 
 COUNTRY_CANCEL_RATES = {
@@ -503,12 +496,6 @@ ROOM_OPTIONS     = ["Yes", "No"]
 COUNTRY_OPTIONS  = sorted(COUNTRY_CANCEL_RATES.keys())
 AGENCY_OPTIONS   = list(AGENCY_RATES.keys())
 
-# ── ADR in PHP (approx. 1 EUR ≈ 62 PHP) ──────────────────────────────────────
-ADR_CURRENCY = "₱"
-ADR_LABEL    = "ADR (₱)"
-ADR_MAX      = 31620.0   # ≈ €510
-ADR_STEP     = 100.0
-
 
 # ── Download helpers ──────────────────────────────────────────────────────────
 def download_if_needed(file_id: str, dest: Path):
@@ -530,38 +517,66 @@ def load_artifacts():
     return model, scaler
 
 
-# ── Prediction helper (from Code 1) ──────────────────────────────────────────
+# ── Prediction helper ─────────────────────────────────────────────────────────
 def predict(model, scaler, raw: dict):
+    # Derived features
     total_past        = raw['previous_cancellations'] + raw['previous_bookings_not_canceled']
     cancellation_rate = raw['previous_cancellations'] / (total_past + 1)
     lead_x_no_deposit = raw['lead_time'] * (1 if raw['deposit_type'] == 'No Deposit' else 0)
+    adr_per_night     = raw['adr'] / max(raw['total_nights'], 1)
+    total_guests      = raw['adults'] + raw['children']
+    is_family         = int(raw['children'] > 0 or raw['babies'] > 0)
 
+    # Build all feature values — order does not matter here, we reorder below
     row = {
-        'lead_time'                  : raw['lead_time'],
-        'adr'                        : raw['adr'],
-        'total_of_special_requests'  : raw['total_of_special_requests'],
-        'required_car_parking_spaces': raw['required_car_parking_spaces'],
-        'booking_changes'            : raw['booking_changes'],
-        'is_repeated_guest'          : raw['is_repeated_guest'],
-        'total_nights'               : raw['total_nights'],
-        'total_guests'               : raw['total_guests'],
-        'got_requested_room'         : raw['got_requested_room'],
-        'cancellation_rate'          : cancellation_rate,
-        'lead_x_no_deposit'          : lead_x_no_deposit,
-        'agent_cancel_rate'          : raw['agent_cancel_rate'],
-        'country_cancel_rate'        : raw['country_cancel_rate'],
+        'agent_cancel_rate'         : raw['agent_cancel_rate'],
+        'same_room'                 : raw['got_requested_room'],
+        'country_cancel_rate'       : raw['country_cancel_rate'],
+        'lead_time'                 : raw['lead_time'],
+        'cancellation_rate'         : cancellation_rate,
+        'lead_x_no_deposit'         : lead_x_no_deposit,
+        'adr'                       : raw['adr'],
+        'total_guests'              : total_guests,
+        'arrival_date_year'         : raw['arrival_date_year'],
+        'total_nights'              : raw['total_nights'],
+        'stays_in_week_nights'      : raw['stays_in_week_nights'],
+        'adults'                    : raw['adults'],
+        'children'                  : raw['children'],
+        'stays_in_weekend_nights'   : raw['stays_in_weekend_nights'],
+        'is_family'                 : is_family,
+        'previous_cancellations'    : raw['previous_cancellations'],
+        'adr_per_night'             : adr_per_night,
+        'arrival_date_day_of_month' : raw['arrival_date_day_of_month'],
+        'days_in_waiting_list'      : raw['days_in_waiting_list'],
     }
 
-    df        = pd.DataFrame([row])[FEATURE_NAMES]
-    df_scaled = scaler.transform(df)
-    prob      = float(model.predict_proba(df_scaled)[0][1])
-    pred      = int(prob >= BEST_THRESH)
+    # ── Step 1: scale using scaler's exact 19-feature order ─────────────────
+    scaler_cols = list(scaler.feature_names_in_)
+    df_for_scaler = pd.DataFrame([row])[scaler_cols]
+    df_scaled_arr = scaler.transform(df_for_scaler)
+
+    # ── Step 2: pass only the N features the RF model was trained on ────────
+    # Older sklearn models don't store feature_names_in_, but n_features_in_
+    # (the count) is always available. We take the first N scaled columns,
+    # which matches the order the model was fitted on.
+    n_model_feats  = model.n_features_in_
+    df_scaled_full = pd.DataFrame(df_scaled_arr, columns=scaler_cols)
+    df_for_model   = df_scaled_full.iloc[:, :n_model_feats]
+
+    prob = float(model.predict_proba(df_for_model)[0][1])
+    pred = int(prob >= BEST_THRESH)
     return prob, pred, row
 
 
-# ── Init ──────────────────────────────────────────────────────────────────────
-init_db()
+# ── Init DB ───────────────────────────────────────────────────────────────────
+try:
+    init_db()
+    db_ok = True
+except Exception as e:
+    db_ok = False
+    st.warning(f"Database init failed: {e}")
 
+# ── Load model ────────────────────────────────────────────────────────────────
 try:
     model, scaler = load_artifacts()
     model_ok = True
@@ -575,7 +590,7 @@ except Exception as e:
 # ══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
     status_color = "#4cba7a" if model_ok else "#e05252"
-    status_text  = "✓ Loaded" if model_ok else "✗ Error"
+    status_text  = "✓ Loaded"  if model_ok else "✗ Error"
 
     st.markdown(f"""
     <div class='brand-wrap'>
@@ -591,7 +606,7 @@ with st.sidebar:
         </div>
         <div class='info-row'>
             <span class='info-key'>Features</span>
-            <span class='info-val'>13 variables</span>
+            <span class='info-val'>{len(FEATURE_NAMES)} variables</span>
         </div>
         <div class='info-row'>
             <span class='info-key'>Test Accuracy</span>
@@ -613,27 +628,35 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     st.markdown("<div class='section-label'>Session Stats</div>", unsafe_allow_html=True)
-    stats = fetch_stats()
-    total, n_canceled, avg_prob, avg_adr = stats if stats and stats[0] else (0, 0, 0.0, 0.0)
-    avg_adr_php = round((avg_adr or 0) * 62, 2)
+    try:
+        stats = fetch_stats()
+        if stats and stats[0]:
+            total      = stats[0] or 0
+            n_canceled = stats[1] or 0
+            avg_prob   = stats[2] or 0.0
+            avg_adr    = stats[3] or 0.0
+        else:
+            total = n_canceled = avg_prob = avg_adr = 0
+    except Exception:
+        total = n_canceled = avg_prob = avg_adr = 0
 
     st.markdown(f"""
     <div class='info-card'>
         <div class='stat-pill'>
             <span class='stat-pill-key'>Total Predictions</span>
-            <span class='stat-pill-val' style='color:#d4a84b;'>{total or 0}</span>
+            <span class='stat-pill-val' style='color:#d4a84b;'>{total}</span>
         </div>
         <div class='stat-pill'>
             <span class='stat-pill-key'>Cancellations Flagged</span>
-            <span class='stat-pill-val' style='color:#e05252;'>{n_canceled or 0}</span>
+            <span class='stat-pill-val' style='color:#e05252;'>{n_canceled}</span>
         </div>
         <div class='stat-pill'>
             <span class='stat-pill-key'>Avg Cancel Prob</span>
-            <span class='stat-pill-val' style='color:#d4a84b;'>{avg_prob or 0}%</span>
+            <span class='stat-pill-val' style='color:#d4a84b;'>{avg_prob}%</span>
         </div>
         <div class='stat-pill'>
             <span class='stat-pill-key'>Avg ADR</span>
-            <span class='stat-pill-val' style='color:#d4a84b;'>₱{avg_adr_php:,.0f}</span>
+            <span class='stat-pill-val' style='color:#d4a84b;'>${avg_adr:,.2f}</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -652,175 +675,103 @@ with st.sidebar:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# HERO HEADER
+# HERO
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <div class='hero-wrapper'>
     <div class='hero-tag'>AI-Powered · Random Forest · Real-Time</div>
     <div class='hero-title'>Booking <span>Cancellation</span> Predictor</div>
-    <div class='hero-sub'>Assess cancellation risk for hotel reservations using a trained Random Forest model. Supports revenue optimization and proactive guest management.</div>
+    <div class='hero-sub'>Assess cancellation risk for hotel reservations using a trained Random Forest model.
+    Supports revenue optimization and proactive guest management.</div>
 </div>
 """, unsafe_allow_html=True)
 
-tab_predict, tab_history = st.tabs(["🔍  Predict", "🕓  History"])
+tab1, tab2 = st.tabs(["🔍  Predict", "🕓  History / Stats"])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — PREDICT
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_predict:
+with tab1:
     col_form, col_result = st.columns([3, 2], gap="large")
 
     with col_form:
 
-        # ── Booking Information ───────────────────────────────────────────────
-        st.markdown("<div class='section-label'>Booking Information</div>", unsafe_allow_html=True)
+        # ── Booking Details ───────────────────────────────────────────────────
+        st.markdown("<div class='section-label'>Booking Details</div>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1:
-            hotel        = st.selectbox("Hotel Type",   HOTEL_OPTIONS,  index=None, placeholder="Select hotel type...")
-            deposit_type = st.selectbox("Deposit Type", DEPOSIT_OPTIONS, index=None, placeholder="Select deposit type...")
+            lead_time       = st.number_input("Lead Time (days)",    min_value=0,   max_value=1000, value=60)
+            arrival_year    = st.selectbox("Arrival Year",           [2015, 2016, 2017], index=2)
         with c2:
-            lead_time       = st.number_input("Lead Time (days)", min_value=0, max_value=737, value=None, step=1, placeholder="Enter days...")
-            booking_changes = st.number_input("Booking Changes",  min_value=0, max_value=20,  value=None, step=1, placeholder="Enter number...")
+            adr             = st.number_input("ADR ($)",             min_value=0.0, max_value=5000.0, value=100.0)
+            arrival_day     = st.number_input("Arrival Day of Month",min_value=1,   max_value=31, value=15)
         with c3:
-            if "adr_input" not in st.session_state:
-                st.session_state["adr_input"] = ""
+            no_deposit      = st.selectbox("No Deposit?",            ["Yes", "No"])
+            days_in_waiting = st.number_input("Days in Waiting List",min_value=0,   max_value=400, value=0)
 
-            def _fmt_adr():
-                raw_val = st.session_state["adr_input"].replace(",", "").strip()
-                if raw_val:
-                    try:
-                        val = float(raw_val)
-                        st.session_state["adr_input"] = f"{val:,.0f}" if val >= 1000 else f"{val:.0f}"
-                    except ValueError:
-                        pass
-
-            adr_raw = st.text_input(
-                ADR_LABEL,
-                key="adr_input",
-                on_change=_fmt_adr,
-                help="Average Daily Rate in Philippine Peso (₱)"
-            )
-            adr_php = None
-            adr_display_error = False
-            if adr_raw.strip():
-                try:
-                    adr_php = float(adr_raw.replace(",", "").strip())
-                    if adr_php < 0 or adr_php > ADR_MAX:
-                        adr_display_error = True
-                        adr_php = None
-                except ValueError:
-                    adr_display_error = True
-                    adr_php = None
-            if adr_display_error:
-                st.markdown(
-                    "<div style='font-size:0.78rem;color:#e05252;margin-top:-0.4rem;'>✗ Enter a valid amount</div>",
-                    unsafe_allow_html=True
-                )
-            parking = st.number_input("Parking Spaces", min_value=0, max_value=8, value=None, step=1, placeholder="Enter number...")
-
-        # Convert PHP → EUR for model (trained on EUR)
-        adr_eur = (adr_php / 62.0) if adr_php is not None else None
-
-        # ── Guest Origin ──────────────────────────────────────────────────────
-        st.markdown("<div class='section-label'>Guest Origin & Booking Channel</div>", unsafe_allow_html=True)
+        # ── Stay Duration ─────────────────────────────────────────────────────
+        st.markdown("<div class='section-label'>Stay Duration</div>", unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
-            country = st.selectbox(
-                "Country of Origin",
-                COUNTRY_OPTIONS,
-                index=None,
-                placeholder="Select country...",
-                help="Select guest country. Cancel rate is pre-computed from training data."
-            )
-            agency_type = st.selectbox(
-                "Booking Channel",
-                AGENCY_OPTIONS,
-                index=None,
-                placeholder="Select booking channel...",
-                help="How the booking was made. Cancel rate is pre-computed from training data."
-            )
+            week_nights    = st.number_input("Week Nights",    min_value=0, max_value=50, value=3)
         with c2:
-            if country and agency_type:
-                country_rate = COUNTRY_CANCEL_RATES.get(country, GLOBAL_MEAN)
-                agency_rate  = AGENCY_RATES[agency_type]
-                c_color = "#e05252" if country_rate > 0.35 else "#d4a84b" if country_rate > 0.25 else "#4cba7a"
-                a_color = "#e05252" if agency_rate  > 0.35 else "#d4a84b" if agency_rate  > 0.25 else "#4cba7a"
-                st.markdown(f"""
-                <div style='display:flex;flex-direction:column;gap:0.6rem;margin-top:0.2rem;'>
-                    <div class='rate-box'>
-                        <div class='rate-label'>Country Cancel Rate</div>
-                        <div class='rate-value' style='color:{c_color};'>{country_rate*100:.1f}%</div>
-                    </div>
-                    <div class='rate-box'>
-                        <div class='rate-label'>Channel Cancel Rate</div>
-                        <div class='rate-value' style='color:{a_color};'>{agency_rate*100:.1f}%</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            elif country:
-                country_rate = COUNTRY_CANCEL_RATES.get(country, GLOBAL_MEAN)
-                c_color = "#e05252" if country_rate > 0.35 else "#d4a84b" if country_rate > 0.25 else "#4cba7a"
-                st.markdown(f"""
-                <div style='display:flex;flex-direction:column;gap:0.6rem;margin-top:0.2rem;'>
-                    <div class='rate-box'>
-                        <div class='rate-label'>Country Cancel Rate</div>
-                        <div class='rate-value' style='color:{c_color};'>{country_rate*100:.1f}%</div>
-                    </div>
-                    <div class='rate-box' style='opacity:0.4;'>
-                        <div class='rate-label'>Channel Cancel Rate</div>
-                        <div class='rate-value' style='color:#4a6275;'>— %</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            elif agency_type:
-                agency_rate = AGENCY_RATES[agency_type]
-                a_color = "#e05252" if agency_rate > 0.35 else "#d4a84b" if agency_rate > 0.25 else "#4cba7a"
-                st.markdown(f"""
-                <div style='display:flex;flex-direction:column;gap:0.6rem;margin-top:0.2rem;'>
-                    <div class='rate-box' style='opacity:0.4;'>
-                        <div class='rate-label'>Country Cancel Rate</div>
-                        <div class='rate-value' style='color:#4a6275;'>— %</div>
-                    </div>
-                    <div class='rate-box'>
-                        <div class='rate-label'>Channel Cancel Rate</div>
-                        <div class='rate-value' style='color:{a_color};'>{agency_rate*100:.1f}%</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                <div style='display:flex;flex-direction:column;gap:0.6rem;margin-top:0.2rem;'>
-                    <div class='rate-box' style='opacity:0.35;'>
-                        <div class='rate-label'>Country Cancel Rate</div>
-                        <div class='rate-value' style='color:#4a6275;'>— %</div>
-                    </div>
-                    <div class='rate-box' style='opacity:0.35;'>
-                        <div class='rate-label'>Channel Cancel Rate</div>
-                        <div class='rate-value' style='color:#4a6275;'>— %</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+            weekend_nights = st.number_input("Weekend Nights", min_value=0, max_value=20, value=1)
 
-        # ── Stay & Guests ─────────────────────────────────────────────────────
-        st.markdown("<div class='section-label'>Stay & Guests</div>", unsafe_allow_html=True)
+        # Derived
+        total_nights  = week_nights + weekend_nights
+        deposit_type  = "No Deposit" if no_deposit == "Yes" else "Non Refund"
+
+        # ── Guest Composition ─────────────────────────────────────────────────
+        st.markdown("<div class='section-label'>Guest Composition</div>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1:
-            total_nights = st.number_input("Total Nights", min_value=0, max_value=60, value=None, step=1, placeholder="Enter nights...")
-            total_guests = st.number_input("Total Guests", min_value=1, max_value=10, value=None, step=1, placeholder="Enter guests...")
+            adults   = st.number_input("Adults",   min_value=1, max_value=10, value=2)
         with c2:
-            special_req   = st.number_input("Special Requests", min_value=0, max_value=5, value=None, step=1, placeholder="Enter number...")
-            got_requested = st.selectbox("Got Requested Room?", ROOM_OPTIONS, index=None, placeholder="Select...")
+            children = st.number_input("Children", min_value=0, max_value=10, value=0)
         with c3:
-            is_repeated = st.selectbox("Repeated Guest?", REPEATED_OPTIONS, index=None, placeholder="Select...")
+            babies   = st.number_input("Babies",   min_value=0, max_value=10, value=0)
+
+        # Derived
+        total_guests = adults + children + babies
+        is_family    = int(children > 0 or babies > 0)
 
         # ── Guest History ─────────────────────────────────────────────────────
         st.markdown("<div class='section-label'>Guest History</div>", unsafe_allow_html=True)
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            got_requested_room         = st.selectbox("Got Requested Room?", ROOM_OPTIONS)
+        with c2:
+            previous_cancellations     = st.number_input("Previous Cancellations",  min_value=0, max_value=50, value=0)
+        with c3:
+            previous_bookings_not_canceled = st.number_input("Prev. Bookings Kept", min_value=0, max_value=50, value=0)
+
+        # ── Cancel Rates ──────────────────────────────────────────────────────
+        st.markdown("<div class='section-label'>Cancellation Rates</div>", unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
-            prev_cancel = st.number_input("Previous Cancellations",   min_value=0, max_value=26, value=None, step=1, placeholder="Enter number...")
+            agent_cancel_rate   = st.number_input(
+                f"Agent Cancel Rate  [global = {GLOBAL_MEAN}]",
+                min_value=0.0, max_value=1.0,
+                value=round(GLOBAL_MEAN, 3), step=0.001, format="%.3f"
+            )
+            country             = st.selectbox("Country of Origin", COUNTRY_OPTIONS)
+            country_cancel_rate = COUNTRY_CANCEL_RATES.get(country, GLOBAL_MEAN)
         with c2:
-            prev_ok     = st.number_input("Previous Bookings (Kept)", min_value=0, max_value=72, value=None, step=1, placeholder="Enter number...")
+            c_color = "#e05252" if country_cancel_rate > 0.35 else "#d4a84b" if country_cancel_rate > 0.25 else "#4cba7a"
+            a_color = "#e05252" if agent_cancel_rate   > 0.35 else "#d4a84b" if agent_cancel_rate   > 0.25 else "#4cba7a"
+            st.markdown(f"""
+            <div style='display:flex;flex-direction:column;gap:0.6rem;margin-top:0.2rem;'>
+                <div class='rate-box'>
+                    <div class='rate-label'>Country Cancel Rate</div>
+                    <div class='rate-value' style='color:{c_color};'>{country_cancel_rate*100:.1f}%</div>
+                </div>
+                <div class='rate-box'>
+                    <div class='rate-label'>Agent Cancel Rate</div>
+                    <div class='rate-value' style='color:{a_color};'>{agent_cancel_rate*100:.1f}%</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
     # ── Result Panel ──────────────────────────────────────────────────────────
     with col_result:
@@ -831,144 +782,146 @@ with tab_predict:
             if not model_ok:
                 st.error(f"Model not loaded: {model_err}")
             else:
-                # ── Validate required fields (from Code 2) ─────────────────
-                missing = []
-                if hotel          is None: missing.append("Hotel Type")
-                if deposit_type   is None: missing.append("Deposit Type")
-                if lead_time      is None: missing.append("Lead Time")
-                if booking_changes is None: missing.append("Booking Changes")
-                if adr_php        is None: missing.append("ADR (₱)")
-                if parking        is None: missing.append("Parking Spaces")
-                if country        is None: missing.append("Country of Origin")
-                if agency_type    is None: missing.append("Booking Channel")
-                if total_nights   is None: missing.append("Total Nights")
-                if total_guests   is None: missing.append("Total Guests")
-                if special_req    is None: missing.append("Special Requests")
-                if got_requested  is None: missing.append("Got Requested Room?")
-                if is_repeated    is None: missing.append("Repeated Guest?")
-                if prev_cancel    is None: missing.append("Previous Cancellations")
-                if prev_ok        is None: missing.append("Previous Bookings (Kept)")
+                raw_input = {
+                    # Direct inputs
+                    'lead_time'                     : lead_time,
+                    'adr'                           : adr,
+                    'adults'                        : adults,
+                    'children'                      : children,
+                    'babies'                        : babies,
+                    'stays_in_week_nights'          : week_nights,
+                    'stays_in_weekend_nights'       : weekend_nights,
+                    'total_nights'                  : total_nights,
+                    'arrival_date_year'             : arrival_year,
+                    'arrival_date_day_of_month'     : arrival_day,
+                    'days_in_waiting_list'          : days_in_waiting,
+                    'previous_cancellations'        : previous_cancellations,
+                    'previous_bookings_not_canceled': previous_bookings_not_canceled,
+                    'got_requested_room'            : 1 if got_requested_room == "Yes" else 0,
+                    'deposit_type'                  : deposit_type,
+                    'agent_cancel_rate'             : agent_cancel_rate,
+                    'country_cancel_rate'           : country_cancel_rate,
+                }
 
-                if missing:
-                    st.warning(f"⚠ Please fill in all required fields: **{', '.join(missing)}**")
+                prob, pred, features = predict(model, scaler, raw_input)
+                stay_prob = 1 - prob
+
+                # ── Result card ───────────────────────────────────────────────
+                if pred == 1:
+                    st.markdown(f"""
+                    <div class='result-cancel'>
+                        <div class='result-verdict' style='color:#e05252;'>⚠ Likely to Cancel</div>
+                        <div class='result-prob' style='color:#e05252;'>{prob*100:.1f}%</div>
+                        <div class='result-label'>cancellation probability</div>
+                    </div>""", unsafe_allow_html=True)
                 else:
-                    raw = {
-                        'lead_time'                     : lead_time,
-                        'adr'                           : adr_eur,          # EUR for model
-                        'total_of_special_requests'     : special_req,
-                        'required_car_parking_spaces'   : parking,
-                        'booking_changes'               : booking_changes,
-                        'is_repeated_guest'             : 1 if is_repeated == "Yes" else 0,
-                        'total_nights'                  : total_nights,
-                        'total_guests'                  : total_guests,
-                        'got_requested_room'            : 1 if got_requested == "Yes" else 0,
-                        'previous_cancellations'        : prev_cancel,
-                        'previous_bookings_not_canceled': prev_ok,
-                        'deposit_type'                  : deposit_type,
-                        'agent_cancel_rate'             : AGENCY_RATES[agency_type],
-                        'country_cancel_rate'           : COUNTRY_CANCEL_RATES.get(country, GLOBAL_MEAN),
-                    }
-
-                    # ── Run prediction (Code 1 logic) ──────────────────────
-                    cancel_prob, prediction, feature_row = predict(model, scaler, raw)
-                    stay_prob = 1 - cancel_prob
-
-                    # Save to DB (ADR stored in EUR for consistency)
-                    insert_prediction(
-                        created_at     = datetime.now().isoformat(timespec="seconds"),
-                        hotel          = hotel,
-                        lead_time      = lead_time,
-                        deposit_type   = deposit_type,
-                        market_segment = f"{country} / {agency_type}",
-                        adr            = round(adr_eur, 2),
-                        features_json  = json.dumps(feature_row),
-                        prediction     = prediction,
-                        cancel_prob    = round(cancel_prob, 4),
-                    )
-
-                    # Agency colour for metrics
-                    agency_rate_val = AGENCY_RATES[agency_type]
-                    a_color_val = (
-                        "#e05252" if agency_rate_val > 0.35
-                        else "#d4a84b" if agency_rate_val > 0.25
-                        else "#4cba7a"
-                    )
-
-                    # ── Result display (Code 1 flow, Code 2 styling) ───────
-                    if prediction == 1:
-                        st.markdown(f"""
-                        <div class='result-cancel'>
-                            <div class='result-verdict' style='color:#e05252;'>⚠ Likely to Cancel</div>
-                            <div class='result-prob' style='color:#e05252;'>{cancel_prob*100:.1f}%</div>
-                            <div class='result-label'>cancellation probability</div>
-                        </div>""", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"""
-                        <div class='result-no-cancel'>
-                            <div class='result-verdict' style='color:#4cba7a;'>✓ Likely to Stay</div>
-                            <div class='result-prob' style='color:#4cba7a;'>{stay_prob*100:.1f}%</div>
-                            <div class='result-label'>retention probability</div>
-                        </div>""", unsafe_allow_html=True)
-
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown(
-                        "<div style='font-size:0.72rem;color:#4a6275;margin-bottom:0.4rem;"
-                        "letter-spacing:0.08em;text-transform:uppercase;'>Cancellation Probability</div>",
-                        unsafe_allow_html=True
-                    )
-                    st.progress(cancel_prob)
-
                     st.markdown(f"""
-                    <div class='metric-row'>
-                        <div class='metric-box'>
-                            <div class='metric-val' style='color:#e05252;'>{cancel_prob*100:.1f}%</div>
-                            <div class='metric-lbl'>Cancel Risk</div>
-                        </div>
-                        <div class='metric-box'>
-                            <div class='metric-val' style='color:#4cba7a;'>{stay_prob*100:.1f}%</div>
-                            <div class='metric-lbl'>Retention</div>
-                        </div>
-                        <div class='metric-box'>
-                            <div class='metric-val' style='color:{a_color_val};'>{agency_rate_val*100:.1f}%</div>
-                            <div class='metric-lbl'>Channel Rate</div>
-                        </div>
+                    <div class='result-no-cancel'>
+                        <div class='result-verdict' style='color:#4cba7a;'>✓ Likely to Stay</div>
+                        <div class='result-prob' style='color:#4cba7a;'>{stay_prob*100:.1f}%</div>
+                        <div class='result-label'>retention probability</div>
                     </div>""", unsafe_allow_html=True)
 
-                    # ── Risk badge & advice (Code 1 thresholds + labels) ───
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if cancel_prob >= 0.75:
-                        badge        = "<span class='badge-very-high'>🔴 VERY HIGH RISK</span>"
-                        advice       = "Require a non-refundable deposit or full prepayment. Set up an overbooking buffer."
-                        border_color = "#c0392b"
-                    elif cancel_prob >= 0.52:
-                        badge        = "<span class='badge-high'>🔴 HIGH RISK</span>"
-                        advice       = "Send a confirmation reminder 1 week before arrival. Consider requesting a partial deposit."
-                        border_color = "#a93226"
-                    elif cancel_prob >= 0.30:
-                        badge        = "<span class='badge-moderate'>🟡 MODERATE RISK</span>"
-                        advice       = "Monitor this booking. Follow up if no special requests are added."
-                        border_color = "#7a5f28"
-                    else:
-                        badge        = "<span class='badge-low'>🟢 LOW RISK</span>"
-                        advice       = "Booking looks secure. Standard follow-up recommended."
-                        border_color = "#1e6b38"
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div style='font-size:0.72rem;color:#4a6275;margin-bottom:0.4rem;"
+                    "letter-spacing:0.08em;text-transform:uppercase;'>Cancellation Probability</div>",
+                    unsafe_allow_html=True
+                )
+                st.progress(prob)
 
-                    st.markdown(f"""
-                    <div class='risk-badge-wrap'>
-                        {badge}
-                        <div class='advice-box' style='border-left-color:{border_color};'>
-                            💡 {advice}
-                        </div>
-                    </div>""", unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class='metric-row'>
+                    <div class='metric-box'>
+                        <div class='metric-val' style='color:#e05252;'>{prob*100:.1f}%</div>
+                        <div class='metric-lbl'>Cancel Risk</div>
+                    </div>
+                    <div class='metric-box'>
+                        <div class='metric-val' style='color:#4cba7a;'>{stay_prob*100:.1f}%</div>
+                        <div class='metric-lbl'>Retention</div>
+                    </div>
+                    <div class='metric-box'>
+                        <div class='metric-val' style='color:{a_color};'>{agent_cancel_rate*100:.1f}%</div>
+                        <div class='metric-lbl'>Channel Rate</div>
+                    </div>
+                </div>""", unsafe_allow_html=True)
 
-                    with st.expander("📋 Feature Summary"):
-                        display_row = dict(feature_row)
-                        display_row['adr (₱)'] = round(adr_php, 2)
-                        display_row.pop('adr', None)
-                        st.dataframe(
-                            pd.DataFrame([display_row]).T.rename(columns={0: "Value"}),
-                            use_container_width=True
+                # ── Risk badge & advice ───────────────────────────────────────
+                st.markdown("<br>", unsafe_allow_html=True)
+                if prob >= 0.75:
+                    badge        = "<span class='badge-very-high'>🔴 VERY HIGH RISK</span>"
+                    advice       = "Require a non-refundable deposit or full prepayment. Set up an overbooking buffer."
+                    border_color = "#c0392b"
+                elif prob >= 0.52:
+                    badge        = "<span class='badge-high'>🔴 HIGH RISK</span>"
+                    advice       = "Send a confirmation reminder 1 week before arrival. Consider requesting a partial deposit."
+                    border_color = "#a93226"
+                elif prob >= 0.30:
+                    badge        = "<span class='badge-moderate'>🟡 MODERATE RISK</span>"
+                    advice       = "Monitor this booking. Follow up if no special requests are added."
+                    border_color = "#7a5f28"
+                else:
+                    badge        = "<span class='badge-low'>🟢 LOW RISK</span>"
+                    advice       = "Booking looks secure. Standard follow-up recommended."
+                    border_color = "#1e6b38"
+
+                st.markdown(f"""
+                <div class='risk-badge-wrap'>
+                    {badge}
+                    <div class='advice-box' style='border-left-color:{border_color};'>
+                        💡 {advice}
+                    </div>
+                </div>""", unsafe_allow_html=True)
+
+                with st.expander("📋 Feature Summary"):
+                    st.dataframe(
+                        pd.DataFrame([features]).T.rename(columns={0: "Value"}),
+                        use_container_width=True
+                    )
+
+                # ── Save to DB ────────────────────────────────────────────────
+                if db_ok:
+                    try:
+                        insert_prediction(
+                            created_at                     = datetime.now().isoformat(timespec="seconds"),
+                            hotel                          = "City Hotel",
+                            market_segment                 = country,
+                            deposit_type                   = deposit_type,
+                            distribution_channel           = "Direct",
+                            customer_type                  = "Transient",
+                            lead_time                      = lead_time,
+                            adr                            = adr,
+                            arrival_date_year              = arrival_year,
+                            arrival_date_day_of_month      = arrival_day,
+                            days_in_waiting_list           = days_in_waiting,
+                            total_of_special_requests      = 0,
+                            booking_changes                = 0,
+                            is_repeated_guest              = 0,
+                            adults                         = adults,
+                            children                       = children,
+                            babies                         = babies,
+                            stays_in_week_nights           = week_nights,
+                            stays_in_weekend_nights        = weekend_nights,
+                            previous_cancellations         = previous_cancellations,
+                            previous_bookings_not_canceled = previous_bookings_not_canceled,
+                            total_guests                   = total_guests,
+                            is_family                      = is_family,
+                            total_nights                   = total_nights,
+                            adr_per_night                  = adr / max(total_nights, 1),
+                            total_previous_bookings        = previous_cancellations + previous_bookings_not_canceled,
+                            cancellation_rate              = features['cancellation_rate'],
+                            has_booking_changes            = 0,
+                            same_room                      = features['same_room'],
+                            request_per_guest              = 0.0,
+                            lead_x_no_deposit              = features['lead_x_no_deposit'],
+                            agent_cancel_rate              = agent_cancel_rate,
+                            country_cancel_rate            = country_cancel_rate,
+                            features_json                  = json.dumps(features),
+                            prediction                     = pred,
+                            cancel_prob                    = round(prob, 4),
                         )
+                    except Exception as e:
+                        st.warning(f"Failed to save prediction to DB: {e}")
 
         else:
             st.markdown("""
@@ -981,212 +934,82 @@ with tab_predict:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — HISTORY
+# TAB 2 — HISTORY / STATS
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_history:
+with tab2:
+
+    # ── History ───────────────────────────────────────────────────────────────
     st.markdown("<div class='section-label'>Prediction History</div>", unsafe_allow_html=True)
-
-    rows = fetch_latest(500)
-
-    if rows:
-        df_all = pd.DataFrame(rows, columns=[
-            "ID", "Timestamp", "Hotel", "Lead Time",
-            "Deposit Type", "Country / Channel", "ADR (EUR)",
-            "Prediction", "Cancel Probability"
-        ])
-        df_all["Timestamp"] = pd.to_datetime(df_all["Timestamp"], errors="coerce")
-        df_all["Date"]      = df_all["Timestamp"].dt.date
-
-        today    = datetime.now().date()
-        min_date = df_all["Date"].min()
-        max_date = df_all["Date"].max()
-
-        # ── Session state for filter ─────────────────────────────────────────
-        if "hist_preset"       not in st.session_state: st.session_state["hist_preset"]       = "Today"
-        if "hist_date_from"    not in st.session_state: st.session_state["hist_date_from"]    = min_date
-        if "hist_date_to"      not in st.session_state: st.session_state["hist_date_to"]      = max_date
-        if "hist_pred_filter"  not in st.session_state: st.session_state["hist_pred_filter"]  = "All"
-        if "hist_hotel_filter" not in st.session_state: st.session_state["hist_hotel_filter"] = "All"
-
-        # ── Clear button CSS ─────────────────────────────────────────────────
-        st.markdown("""
-        <style>
-        div[data-testid="stButton"].clear-btn > button {
-            background: transparent !important;
-            border: 1px solid #2a3a4a !important;
-            color: #8fa8c0 !important;
-            font-size: 0.72rem !important;
-            padding: 0.3rem 0.7rem !important;
-            border-radius: 6px !important;
-            width: auto !important;
-            box-shadow: none !important;
-            letter-spacing: 0.05em;
-        }
-        div[data-testid="stButton"].clear-btn > button:hover {
-            border-color: #e05252 !important;
-            color: #e05252 !important;
-            transform: none !important;
-            box-shadow: none !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        # ── Filter row ───────────────────────────────────────────────────────
-        fc1, fc2, fc3, fc4 = st.columns([2.5, 2, 2, 0.8])
-        with fc1:
-            preset = st.selectbox(
-                "Date Range",
-                ["Today", "This Week", "Last Month", "Custom Range"],
-                index=["Today", "This Week", "Last Month", "Custom Range"].index(
-                    st.session_state["hist_preset"]
-                ),
-                key="hist_preset_sel"
-            )
-            st.session_state["hist_preset"] = preset
-
-        with fc2:
-            pred_filter = st.selectbox(
-                "Prediction",
-                ["All", "✓ Stay", "⚠ Cancel"],
-                index=["All", "✓ Stay", "⚠ Cancel"].index(st.session_state["hist_pred_filter"]),
-                key="hist_pred_sel"
-            )
-            st.session_state["hist_pred_filter"] = pred_filter
-
-        with fc3:
-            hotel_options = ["All"] + sorted(df_all["Hotel"].dropna().unique().tolist())
-            hotel_idx = hotel_options.index(st.session_state["hist_hotel_filter"]) \
-                        if st.session_state["hist_hotel_filter"] in hotel_options else 0
-            hotel_filter = st.selectbox(
-                "Hotel Type",
-                hotel_options,
-                index=hotel_idx,
-                key="hist_hotel_sel"
-            )
-            st.session_state["hist_hotel_filter"] = hotel_filter
-
-        with fc4:
-            st.markdown("<div style='margin-top:1.78rem;'></div>", unsafe_allow_html=True)
-            st.markdown('<div data-testid="stButton" class="clear-btn">', unsafe_allow_html=True)
-            clear_clicked = st.button("✕ Clear", key="hist_clear")
-            st.markdown('</div>', unsafe_allow_html=True)
-            if clear_clicked:
-                st.session_state["hist_preset"]       = "Today"
-                st.session_state["hist_date_from"]    = min_date
-                st.session_state["hist_date_to"]      = max_date
-                st.session_state["hist_pred_filter"]  = "All"
-                st.session_state["hist_hotel_filter"] = "All"
-                st.rerun()
-
-        # ── Custom Range pickers ─────────────────────────────────────────────
-        if preset == "Custom Range":
-            cr1, cr2 = st.columns(2)
-            with cr1:
-                custom_from = st.date_input("From", value=st.session_state["hist_date_from"],
-                                            min_value=min_date, max_value=max_date, key="hist_cf")
-                st.session_state["hist_date_from"] = custom_from
-            with cr2:
-                custom_to = st.date_input("To", value=st.session_state["hist_date_to"],
-                                          min_value=min_date, max_value=max_date, key="hist_ct")
-                st.session_state["hist_date_to"] = custom_to
-            date_from = custom_from
-            date_to   = custom_to
-        elif preset == "Today":
-            date_from = today
-            date_to   = today
-        elif preset == "This Week":
-            date_from = today - pd.Timedelta(days=today.weekday())
-            date_to   = today
-        elif preset == "Last Month":
-            date_from = (today.replace(day=1) - pd.Timedelta(days=1)).replace(day=1)
-            date_to   = today.replace(day=1) - pd.Timedelta(days=1)
-        else:
-            date_from = min_date
-            date_to   = max_date
-
-        # ── Apply filters ────────────────────────────────────────────────────
-        mask        = (df_all["Date"] >= date_from) & (df_all["Date"] <= date_to)
-        df_filtered = df_all[mask].copy()
-        df_filtered["Prediction_label"] = df_filtered["Prediction"].map({1: "⚠ Cancel", 0: "✓ Stay"})
-
-        if pred_filter != "All":
-            df_filtered = df_filtered[df_filtered["Prediction_label"] == pred_filter]
-        if hotel_filter != "All":
-            df_filtered = df_filtered[df_filtered["Hotel"] == hotel_filter]
-
-        # ── Summary stats ────────────────────────────────────────────────────
-        total_f    = len(df_filtered)
-        cancel_f   = int((df_filtered["Prediction"] == 1).sum())
-        stay_f     = total_f - cancel_f
-        avg_prob_f = df_filtered["Cancel Probability"].mean() * 100 if total_f > 0 else 0
-        avg_adr_f  = df_filtered["ADR (EUR)"].mean() * 62 if total_f > 0 else 0
-
-        st.markdown(f"""
-        <div style='display:flex;gap:0.8rem;margin:0.8rem 0 1rem;'>
-            <div class='metric-box' style='flex:1;'>
-                <div class='metric-val' style='color:#d4a84b;'>{total_f}</div>
-                <div class='metric-lbl'>Total</div>
-            </div>
-            <div class='metric-box' style='flex:1;'>
-                <div class='metric-val' style='color:#4cba7a;'>{stay_f}</div>
-                <div class='metric-lbl'>Stay</div>
-            </div>
-            <div class='metric-box' style='flex:1;'>
-                <div class='metric-val' style='color:#e05252;'>{cancel_f}</div>
-                <div class='metric-lbl'>Cancel</div>
-            </div>
-            <div class='metric-box' style='flex:1;'>
-                <div class='metric-val' style='color:#d4a84b;'>{avg_prob_f:.1f}%</div>
-                <div class='metric-lbl'>Avg Risk</div>
-            </div>
-            <div class='metric-box' style='flex:1;'>
-                <div class='metric-val' style='color:#d4a84b;'>₱{avg_adr_f:,.0f}</div>
-                <div class='metric-lbl'>Avg ADR</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        if total_f == 0:
-            st.markdown("""
-            <div class='placeholder-box' style='padding:1.5rem;'>
-                <div style='font-size:0.9rem;color:#4a6275;'>No records match the selected filters.</div>
-            </div>""", unsafe_allow_html=True)
-        else:
-            df_display = df_filtered[[
+    try:
+        rows = fetch_latest(30)
+        if rows:
+            df_hist = pd.DataFrame(rows, columns=[
                 "ID", "Timestamp", "Hotel", "Lead Time",
-                "Deposit Type", "Country / Channel", "ADR (EUR)",
-                "Prediction_label", "Cancel Probability"
-            ]].copy()
-            df_display.rename(columns={"Prediction_label": "Prediction"}, inplace=True)
-            df_display["Timestamp"]          = df_display["Timestamp"].dt.strftime("%Y-%m-%d %H:%M")
-            df_display["ADR (₱)"]            = df_display["ADR (EUR)"].apply(lambda x: f"₱{x*62:,.0f}")
-            df_display["Cancel Probability"] = (df_display["Cancel Probability"] * 100).round(1).astype(str) + "%"
-            df_display.drop(columns=["ADR (EUR)"], inplace=True)
-
-            st.dataframe(df_display, use_container_width=True, hide_index=True)
-
-            dl_df = df_filtered[[
-                "ID", "Timestamp", "Hotel", "Lead Time",
-                "Deposit Type", "Country / Channel", "ADR (EUR)",
-                "Prediction_label", "Cancel Probability"
-            ]].copy()
-            dl_df.rename(columns={"Prediction_label": "Prediction"}, inplace=True)
-            dl_df["ADR (₱)"]            = dl_df["ADR (EUR)"].apply(lambda x: round(x * 62, 2))
-            dl_df["Cancel Probability"] = (dl_df["Cancel Probability"] * 100).round(1)
-            dl_df["Timestamp"]          = dl_df["Timestamp"].astype(str)
-            dl_df.drop(columns=["ADR (EUR)"], inplace=True)
+                "Deposit Type", "Country / Channel", "ADR",
+                "Total Nights", "Total Guests", "Family",
+                "Hist. Cancel Rate", "Same Room", "Req/Guest",
+                "Prediction", "Cancel Probability",
+            ])
+            df_hist["Prediction"]         = df_hist["Prediction"].map({1: "⚠ Cancel", 0: "✓ Stay"})
+            df_hist["Cancel Probability"] = (df_hist["Cancel Probability"] * 100).round(1).astype(str) + "%"
+            df_hist["Family"]             = df_hist["Family"].map({1: "✓ Yes", 0: "No"})
+            st.dataframe(df_hist, use_container_width=True, hide_index=True)
 
             st.download_button(
-                label     = "⬇ Download Filtered CSV",
-                data      = dl_df.to_csv(index=False).encode("utf-8"),
-                file_name = f"hotel_predictions_{date_from}_to_{date_to}.csv",
-                mime      = "text/csv"
+                label     = "⬇ Download CSV",
+                data      = df_hist.to_csv(index=False).encode("utf-8"),
+                file_name = f"hotel_predictions_{datetime.now().date()}.csv",
+                mime      = "text/csv",
             )
-    else:
+        else:
+            st.markdown("""
+            <div class='placeholder-box' style='padding:1.5rem;'>
+                <div style='font-size:0.9rem;color:#4a6275;'>No prediction history yet.</div>
+            </div>""", unsafe_allow_html=True)
+    except Exception:
         st.markdown("""
-        <div class='placeholder-box'>
-            <div style='font-size:0.9rem;color:#4a6275;line-height:1.7;'>
-                No predictions yet.<br>
-                Make a prediction in the <strong style="color:#d4a84b;">Predict</strong> tab first.
+        <div class='placeholder-box' style='padding:1.5rem;'>
+            <div style='font-size:0.9rem;color:#4a6275;'>No history available.</div>
+        </div>""", unsafe_allow_html=True)
+
+    # ── Stats ─────────────────────────────────────────────────────────────────
+    st.markdown("<div class='section-label'>Session Statistics</div>", unsafe_allow_html=True)
+    try:
+        stats = fetch_stats()
+        if stats and stats[0]:
+            t, nc, ap, aa = stats[0], stats[1], stats[2], stats[3]
+            cancel_pct = round((nc / t * 100), 1) if t else 0
+            st.markdown(f"""
+            <div style='display:flex;gap:0.8rem;margin:0.5rem 0 1rem;'>
+                <div class='metric-box' style='flex:1;'>
+                    <div class='metric-val' style='color:#d4a84b;'>{t}</div>
+                    <div class='metric-lbl'>Total</div>
+                </div>
+                <div class='metric-box' style='flex:1;'>
+                    <div class='metric-val' style='color:#4cba7a;'>{t - nc}</div>
+                    <div class='metric-lbl'>Stay</div>
+                </div>
+                <div class='metric-box' style='flex:1;'>
+                    <div class='metric-val' style='color:#e05252;'>{nc}</div>
+                    <div class='metric-lbl'>Cancel</div>
+                </div>
+                <div class='metric-box' style='flex:1;'>
+                    <div class='metric-val' style='color:#d4a84b;'>{ap}%</div>
+                    <div class='metric-lbl'>Avg Risk</div>
+                </div>
+                <div class='metric-box' style='flex:1;'>
+                    <div class='metric-val' style='color:#d4a84b;'>${aa:,.2f}</div>
+                    <div class='metric-lbl'>Avg ADR</div>
+                </div>
             </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class='placeholder-box' style='padding:1.5rem;'>
+                <div style='font-size:0.9rem;color:#4a6275;'>No stats available yet.</div>
+            </div>""", unsafe_allow_html=True)
+    except Exception:
+        st.markdown("""
+        <div class='placeholder-box' style='padding:1.5rem;'>
+            <div style='font-size:0.9rem;color:#4a6275;'>No stats available.</div>
         </div>""", unsafe_allow_html=True)
